@@ -111,7 +111,7 @@ mod tests {
         assert_ne!(initial_dirt, final_dirt);
     }
     
-    fn count_material(world: &ChunkWorld, material: Material, x1: i32, x2: i32, y1: i32, y2: i32) -> usize {
+    fn count_material(world: &mut ChunkWorld, material: Material, x1: i32, x2: i32, y1: i32, y2: i32) -> usize {
         let mut count = 0;
         for x in x1..x2 {
             for y in y1..y2 {
