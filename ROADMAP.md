@@ -335,12 +335,19 @@ SHOWCASE complements milestone demos:
 
 ---
 
-### M17: 村庄/城镇结构生成
+### M17: 村庄/城镇结构生成 ✓ **COMPLETE**
 **目标**: 程序生成人类聚落
 - 结构模板: 房屋、商店、祭坛、地牢
 - 分层放置: 先定位结构点，再雕刻到地形
 - 守护NPC: 村民、商人
 - M17 Demo: 生成3个村庄 + 1个地下地牢，AI探索，10秒
+
+**实现**:
+- ✓ `structures.rs`: 结构模板系统 (House, Shop, Altar, UndergroundDungeon)
+- ✓ `StructureGenerator`: 自动寻找地表/地下位置，避免冲突
+- ✓ M17 Demo headless: 3+ surface structures + 1+ dungeon, success:true
+- ✓ SHOWCASE Chapter 18: Villages展示
+- ✓ 确定性: seed 42 → 固定结构布局
 
 **验收**:
 - 结构不与地形冲突

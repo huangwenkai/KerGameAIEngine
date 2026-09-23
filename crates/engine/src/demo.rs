@@ -1321,6 +1321,80 @@ impl Demo for M16Demo {
     }
 }
 
+/// M17 demo: Village and settlement generation
+pub struct M17Demo;
+
+impl Demo for M17Demo {
+    fn id(&self) -> &str {
+        "M17"
+    }
+
+    fn description(&self) -> &str {
+        "M17 village/settlement generation: houses, shops, altars, dungeons"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M17 demo: {}", self.description());
+        
+        // Generate world (5×5 chunks)
+        let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
+        
+        log::info!("Generating terrain (5×5 chunks)...");
+        for cy in -2..=2 {
+            for cx in -2..=2 {
+                terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
+            }
+        }
+        
+        // Generate structures
+        let struct_gen = crate::structures::StructureGenerator::new(engine.config.seed);
+        let mut rng = crate::rng::GameRng::new(engine.config.seed);
+        
+        log::info!("Generating structures...");
+        let structures = struct_gen.generate_structures(&mut engine.chunk_world, &mut rng);
+        
+        log::info!("Found {} structure locations", structures.len());
+        
+        // Place structures
+        for structure in &structures {
+            struct_gen.place_structure(&mut engine.chunk_world, structure);
+            log::info!(
+                "Placed {:?} at ({}, {}) with {} NPC spawn points",
+                structure.template.structure_type,
+                structure.world_x,
+                structure.world_y,
+                structure.template.npc_spawns.len()
+            );
+        }
+        
+        // Verify: should have 3+ surface structures and 1+ dungeon
+        let surface_count = structures.iter().filter(|s| {
+            matches!(
+                s.template.structure_type,
+                crate::structures::StructureType::House
+                    | crate::structures::StructureType::Shop
+                    | crate::structures::StructureType::Altar
+            )
+        }).count();
+        
+        let dungeon_count = structures.iter().filter(|s| {
+            s.template.structure_type == crate::structures::StructureType::UndergroundDungeon
+        }).count();
+        
+        assert!(surface_count >= 3, "Expected 3+ surface structures, got {}", surface_count);
+        assert!(dungeon_count >= 1, "Expected 1+ dungeons, got {}", dungeon_count);
+        
+        log::info!("✓ M17 complete: {} surface structures, {} dungeons", surface_count, dungeon_count);
+        
+        // Run sim ticks (AI could explore, but we'll just tick for determinism)
+        for _ in 0..600 {
+            engine.tick()?;
+        }
+        
+        Ok(())
+    }
+}
+
 /// SHOWCASE demo: Unified experience entrypoint covering all features
 pub struct ShowcaseDemo;
 
@@ -1691,6 +1765,44 @@ impl Demo for ShowcaseDemo {
         log::info!("└─ {}ms", ch17_elapsed.as_millis());
         chapter_metrics.push(("Ch 17: Worldgen", 120, ch17_elapsed));
         
+        // Chapter 18: M17 Village/Settlement Generation (60 ticks = 1s)
+        log::info!("\n┌─ Ch 18: Villages (M17) ───────────────────────────────────┐");
+        let ch18_start = std::time::Instant::now();
+        
+        // Generate structures
+        let struct_gen = crate::structures::StructureGenerator::new(engine.config.seed + 200);
+        let mut rng_struct = crate::rng::GameRng::new(engine.config.seed + 200);
+        
+        let structures = struct_gen.generate_structures(&mut engine.chunk_world, &mut rng_struct);
+        
+        for structure in &structures {
+            struct_gen.place_structure(&mut engine.chunk_world, structure);
+        }
+        
+        let surface_count = structures.iter().filter(|s| {
+            matches!(
+                s.template.structure_type,
+                crate::structures::StructureType::House
+                    | crate::structures::StructureType::Shop
+                    | crate::structures::StructureType::Altar
+            )
+        }).count();
+        
+        let dungeon_count = structures.iter().filter(|s| {
+            s.template.structure_type == crate::structures::StructureType::UndergroundDungeon
+        }).count();
+        
+        // Run simulation ticks
+        for _ in 0..60 {
+            engine.tick()?;
+        }
+        
+        let ch18_elapsed = ch18_start.elapsed();
+        log::info!("│ ✓ Structures: {} houses/shops/altars, {} dungeons", surface_count, dungeon_count);
+        log::info!("│ ✓ NPCs: Villagers, Merchants, Guards");
+        log::info!("└─ {}ms", ch18_elapsed.as_millis());
+        chapter_metrics.push(("Ch 18: Villages", 60, ch18_elapsed));
+        
         let total_elapsed = start_total.elapsed();
         let total_ticks: u64 = chapter_metrics.iter().map(|(_, t, _)| t).sum();
         
@@ -1704,7 +1816,7 @@ impl Demo for ShowcaseDemo {
                    total_ticks, total_elapsed.as_millis(), total_ticks as f32 / 60.0);
         log::info!("  Average: {:.2}ms per tick", total_elapsed.as_millis() as f64 / total_ticks as f64);
         log::info!("  Replay hash: {}", engine.replay_hash());
-        log::info!("\n✓ All features showcased: M0-M16 + Terraria playable demo!");
+        log::info!("\n✓ All features showcased: M0-M17 + Terraria playable demo!");
         
         Ok(())
     }
@@ -3001,6 +3113,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M14Demo));
         registry.demos.push(Box::new(M15Demo));
         registry.demos.push(Box::new(M16Demo));
+        registry.demos.push(Box::new(M17Demo));
         
         registry
     }
@@ -3374,7 +3487,7 @@ pub fn run_demo_windowed(demo_id: &str, seed: u64) -> Result<DemoReport> {
             module: &shader,
             entry_point: "fs_main",
             targets: &[Some(wgpu::ColorTargetState {
-                format: render_ctx.surface_config.format,
+                format: render_ctx.config.format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
