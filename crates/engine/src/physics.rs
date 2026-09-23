@@ -121,14 +121,17 @@ impl CharacterMotor {
             self.velocity_y = 0.0;
         }
 
-        // Step-up (climb small obstacles)
-        if !self.on_ground && self.velocity_x.abs() > 10.0 {
-            let step_height = 8.0; // 2 cells
-            let step_up = self.aabb.translate(0.0, -step_height);
-            if !collides_with_world(&step_up, world) {
-                let step_forward = step_up.translate(self.velocity_x.signum() * 4.0, 0.0);
-                if !collides_with_world(&step_forward, world) {
-                    self.aabb = step_up;
+        // Step-up only when grounded and horizontally blocked (prevents A/D looking like jumps)
+        if self.on_ground && self.velocity_x.abs() > 10.0 {
+            let probe = self.aabb.translate(self.velocity_x.signum() * 2.0, 0.0);
+            if collides_with_world(&probe, world) {
+                let step_height = 8.0; // 2 cells
+                let step_up = self.aabb.translate(0.0, -step_height);
+                if !collides_with_world(&step_up, world) {
+                    let step_forward = step_up.translate(self.velocity_x.signum() * 4.0, 0.0);
+                    if !collides_with_world(&step_forward, world) {
+                        self.aabb = step_forward;
+                    }
                 }
             }
         }

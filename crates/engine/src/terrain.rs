@@ -1,7 +1,8 @@
-//! Procedural terrain generation with Perlin noise
+//! Procedural terrain generation with rich biomes, caves, and ores
 
 use crate::chunk::{ChunkWorld, Material, ChunkCoord, CHUNK_SIZE};
 use crate::rng::GameRng;
+use crate::biomes::{BiomeType, OreType};
 
 /// Simple 2D Perlin-like noise (deterministic from seed)
 pub struct NoiseGenerator {
@@ -67,7 +68,7 @@ impl NoiseGenerator {
     }
 }
 
-/// Terrain generator
+/// Rich terrain generator with biomes, caves, and ores
 pub struct TerrainGenerator {
     noise: NoiseGenerator,
     seed: u64,
@@ -81,7 +82,7 @@ impl TerrainGenerator {
         }
     }
 
-    /// Generate terrain for a chunk
+    /// Generate terrain for a chunk with all features
     pub fn generate_chunk(&self, world: &mut ChunkWorld, coord: ChunkCoord) {
         let chunk = world.get_or_create_chunk(coord);
         let base_x = coord.x * CHUNK_SIZE as i32;
@@ -98,51 +99,131 @@ impl TerrainGenerator {
         }
     }
 
-    /// Determine material at world coordinates
-    fn get_material_at(&self, x: i32, y: i32) -> Material {
-        let scale = 0.01; // Noise frequency
+    /// Get biome at world X coordinate (exposed for M16 demo)
+    pub fn get_biome_at(&self, x: i32) -> BiomeType {
+        self.get_biome(x)
+    }
+    
+    /// Determine biome at world X coordinate
+    fn get_biome(&self, x: i32) -> BiomeType {
+        let scale = 0.002; // Large-scale biome transitions
+        let biome_noise = self.noise.noise_2d(x as f64 * scale, 0.0);
+
+        if biome_noise < 0.15 {
+            BiomeType::Desert
+        } else if biome_noise < 0.35 {
+            BiomeType::Swamp
+        } else if biome_noise < 0.60 {
+            BiomeType::Grassland
+        } else if biome_noise < 0.80 {
+            BiomeType::Jungle
+        } else {
+            BiomeType::Mountain
+        }
+    }
+
+    /// Check if position is inside a cave
+    fn is_cave(&self, x: i32, y: i32) -> bool {
+        // Only generate caves underground (y > 10)
+        if y < 10 {
+            return false;
+        }
+
+        // 3D cave noise (worm-like caves)
+        let scale = 0.05;
         let nx = x as f64 * scale;
         let ny = y as f64 * scale;
 
-        // Surface height (varies by x)
-        let height_noise = self.noise.octave_noise_2d(nx * 2.0, 0.0, 4, 0.5);
-        let surface_y = (height_noise * 50.0) as i32;
+        let cave_noise = self.noise.octave_noise_2d(nx, ny, 4, 0.5);
 
-        // Depth from surface
+        // Threshold for cave: between 0.45 and 0.55 creates winding tunnels
+        cave_noise > 0.45 && cave_noise < 0.55
+    }
+
+    /// Check if position should have ore vein
+    fn get_ore(&self, x: i32, y: i32, depth: i32) -> Option<OreType> {
+        let ores = [
+            (OreType::Copper, 1.0),
+            (OreType::Iron, 2.0),
+            (OreType::Gold, 3.0),
+            (OreType::MagicCrystal, 4.0),
+        ];
+
+        for (ore, offset) in &ores {
+            let (min_depth, max_depth) = ore.depth_range();
+            if depth >= min_depth && depth <= max_depth {
+                // Use noise to determine if ore spawns here (unique offset per ore type)
+                let ore_noise = self.noise.noise_2d(
+                    x as f64 * 0.1 + offset * 1000.0,
+                    y as f64 * 0.1 + offset * 500.0,
+                );
+
+                if ore_noise < ore.frequency() {
+                    return Some(*ore);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Determine material at world coordinates with all features
+    fn get_material_at(&self, x: i32, y: i32) -> Material {
+        let biome = self.get_biome(x);
+        let scale = 0.01;
+        let nx = x as f64 * scale;
+        let ny = y as f64 * scale;
+
+        // Surface height with biome variation
+        let height_noise = self.noise.octave_noise_2d(nx * 2.0, 0.0, 4, 0.5);
+        let biome_offset = biome.height_offset();
+        let surface_y = (height_noise * 50.0 + biome_offset) as i32;
+
         let depth = y - surface_y;
 
+        // Air above surface
         if depth < -5 {
-            // Sky
-            Material::Air
+            return Material::Air;
         } else if depth < 0 {
-            // Above surface
-            Material::Air
-        } else if depth == 0 {
-            // Surface layer
-            Material::Grass
-        } else if depth < 10 {
-            // Dirt layer
-            let dirt_noise = self.noise.noise_2d(nx * 5.0, ny * 5.0);
-            if dirt_noise > 0.7 {
-                Material::Stone // Occasional stone in dirt
-            } else {
-                Material::Dirt
-            }
-        } else if depth < 50 {
-            // Stone layer
-            let cave_noise = self.noise.octave_noise_2d(nx * 3.0, ny * 3.0, 3, 0.6);
-            if cave_noise > 0.6 {
-                Material::Air // Cave
-            } else {
-                Material::Stone
-            }
-        } else if depth < 100 {
-            // Deep stone
-            Material::Stone
-        } else {
-            // Very deep
-            Material::Stone
+            return Material::Air;
         }
+
+        // Check for caves first (highest priority)
+        if self.is_cave(x, y) {
+            // Lava at very deep caves
+            if y > 150 && self.noise.noise_2d(x as f64 * 0.2, y as f64 * 0.2) > 0.7 {
+                return Material::Water; // TODO: Add lava material
+            }
+            return Material::Air;
+        }
+
+        // Surface layer
+        if depth == 0 {
+            return biome.surface_material();
+        }
+
+        // Check for ores
+        if depth > 5 {
+            if let Some(ore) = self.get_ore(x, y, depth) {
+                return ore.material(); // Returns Stone for now, will be ore materials later
+            }
+        }
+
+        // Subsurface layers
+        if depth < 10 {
+            return biome.subsurface_material();
+        }
+
+        // Check for underground lakes/water
+        if depth > 20 && depth < 40 {
+            let water_noise = self.noise.noise_2d(nx * 3.0, ny * 3.0);
+            if water_noise > 0.75 {
+                return Material::Water;
+            }
+        }
+
+        // Deep stone layer
+        Material::Stone
     }
 }
 
@@ -206,5 +287,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn biome_diversity() {
+        let gen = TerrainGenerator::new(42);
+
+        let mut biomes = std::collections::HashSet::new();
+        for x in (-500..500).step_by(100) {
+            biomes.insert(gen.get_biome(x));
+        }
+
+        // Should have multiple biomes in range
+        assert!(biomes.len() >= 3, "Should have at least 3 biome types in test range");
+    }
+
+    #[test]
+    fn caves_exist() {
+        let gen = TerrainGenerator::new(42);
+
+        let mut found_cave = false;
+        for y in 10..100 {
+            for x in 0..100 {
+                if gen.is_cave(x, y) {
+                    found_cave = true;
+                    break;
+                }
+            }
+            if found_cave {
+                break;
+            }
+        }
+
+        assert!(found_cave, "Should find at least one cave in test range");
     }
 }

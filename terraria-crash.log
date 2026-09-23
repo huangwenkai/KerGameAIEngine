@@ -1,0 +1,230 @@
+﻿cargo : warning: unused import: `Event`
+所在位置 C:\Users\Ker\AppData\Local\Temp\ps-script-05e22442-f5f0-4c89-845b-2385e5fa62f9.ps1:74 字符: 26
++ ... KTRACE='1'; cargo run --release --bin engine -- run-demo TERRARIA --s ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: unused import: `Event`:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    --> crates\engine\src\demo.rs:2212:17
+     |
+2212 |         event::{Event, WindowEvent, ElementState, MouseButton},
+     |                 ^^^^^
+     |
+     = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::rng::GameRng`
+ --> crates\engine\src\terrain.rs:4:5
+  |
+4 | use crate::rng::GameRng;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Material`
+ --> crates\engine\src\physics.rs:3:32
+  |
+3 | use crate::chunk::{ChunkWorld, Material};
+  |                                ^^^^^^^^
+
+warning: unused import: `Material`
+ --> crates\engine\src\lighting.rs:3:32
+  |
+3 | use crate::chunk::{ChunkWorld, Material};
+  |                                ^^^^^^^^
+
+warning: variable does not need to be mutable
+    --> crates\engine\src\demo.rs:1169:13
+     |
+1169 |         let mut player_y = 400.0;
+     |             ----^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `hit_sfx`
+    --> crates\engine\src\demo.rs:1482:13
+     |
+1482 |         let hit_sfx = audio.register_sound("hit");
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_hit_sfx`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `explosion_sfx`
+    --> crates\engine\src\demo.rs:1949:13
+     |
+1949 |         let explosion_sfx = audio.register_sound("explosion");
+     |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_explosion_sfx`
+
+warning: variable does not need to be mutable
+    --> crates\engine\src\demo.rs:2243:9
+     |
+2243 |     let mut rng = crate::rng::GameRng::new(engine.config.seed);
+     |         ----^^^
+     |         |
+     |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> crates\engine\src\demo.rs:2244:9
+     |
+2244 |     let mut player_motor = crate::physics::CharacterMotor::new(64.0, -50.0);
+     |         ----^^^^^^^^^^^^
+     |         |
+     |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> crates\engine\src\demo.rs:2256:9
+     |
+2256 |     let mut world_items = crate::items::WorldItems::new();
+     |         ----^^^^^^^^^^^
+     |         |
+     |         help: remove this `mut`
+
+warning: field `seed` is never read
+ --> crates\engine\src\replay.rs:8:5
+  |
+6 | pub struct ReplayHasher {
+  |            ------------ field in this struct
+7 |     hasher: Sha256,
+8 |     seed: u64,
+  |     ^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `seed` is never read
+  --> crates\engine\src\terrain.rs:73:5
+   |
+71 | pub struct TerrainGenerator {
+   |            ---------------- field in this struct
+72 |     noise: NoiseGenerator,
+73 |     seed: u64,
+   |     ^^^^
+
+warning: calls to `std::mem::drop` with a reference instead of an owned value does nothing
+    --> crates\engine\src\demo.rs:2704:37
+     |
+2704 | ...                   drop(enemy);
+     |                       ^^^^^-----^
+     |                            |
+     |                            argument has type `&mut CombatEntity`
+     |
+     = note: `#[warn(dropping_references)]` on by default
+help: use `let _ = ...` to ignore the expression or result
+     |
+2704 -                                     drop(enemy);
+2704 +                                     let _ = enemy;
+     |
+
+warning: calls to `std::mem::drop` with a reference instead of an owned value does nothing
+    --> crates\engine\src\demo.rs:2722:37
+     |
+2722 | ...                   drop(enemy);
+     |                       ^^^^^-----^
+     |                            |
+     |                            argument has type `&CombatEntity`
+     |
+help: use `let _ = ...` to ignore the expression or result
+     |
+2722 -                                     drop(enemy);
+2722 +                                     let _ = enemy;
+     |
+
+warning: `ker-engine` (lib) generated 14 warnings (run `cargo fix --lib -p ker-engine` to apply 10 suggestions)
+    Finished `release` profile [optimized] target(s) in 0.12s
+     Running `target\release\engine.exe run-demo TERRARIA --seed 42`
+[2026-09-23T18:50:32Z INFO  engine] Running demo: TERRARIA (seed: 42, headless: false)
+[2026-09-23T18:50:32Z INFO  ker_engine] Initializing engine (headless: false, seed: 42)
+[2026-09-23T18:50:32Z INFO  ker_engine::demo] Running Terraria demo (WINDOWED PLAYABLE MODE)
+[2026-09-23T18:50:32Z INFO  ker_engine::demo] Controls:
+[2026-09-23T18:50:32Z INFO  ker_engine::demo]   A/D or Arrow Keys - Move left/right
+[2026-09-23T18:50:32Z INFO  ker_engine::demo]   Space - Jump
+[2026-09-23T18:50:32Z INFO  ker_engine::demo]   Left Mouse - Dig block at cursor
+[2026-09-23T18:50:32Z INFO  ker_engine::demo]   Right Mouse - Place block from hotbar
+[2026-09-23T18:50:32Z INFO  ker_engine::demo]   1-9 - Select hotbar slot
+[2026-09-23T18:50:32Z INFO  ker_engine::demo]   ESC - Quit
+[2026-09-23T18:50:32Z INFO  ker_engine::demo] 
+[2026-09-23T18:50:32Z INFO  ker_engine::demo] Goal: Dig, build, fight enemies, and survive!
+[2026-09-23T18:50:32Z INFO  ker_engine::demo] Generating terrain (5脳5 chunks)...
+[2026-09-23T18:50:32Z INFO  ker_engine::demo] Creating window...
+[2026-09-23T18:50:32Z INFO  ker_engine::render] Initializing windowed render context (1024脳768)
+[2026-09-23T18:50:32Z INFO  wgpu_hal::vulkan::instance] Debug utils not enabled: debug_utils_user_data not passed to In
+stance::from_raw
+[2026-09-23T18:50:32Z WARN  wgpu_hal::vulkan::conv] Unrecognized present mode 1000361000
+[2026-09-23T18:50:32Z INFO  wgpu_core::instance] Adapter Vulkan AdapterInfo { name: "NVIDIA GeForce RTX 5070 Ti", vendo
+r: 4318, device: 11269, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "616.56", backend: Vulkan }
+[2026-09-23T18:50:32Z INFO  ker_engine::render] Using adapter: AdapterInfo { name: "NVIDIA GeForce RTX 5070 Ti", vendor
+: 4318, device: 11269, device_type: DiscreteGpu, driver: "NVIDIA", driver_info: "616.56", backend: Vulkan }
+[2026-09-23T18:50:32Z WARN  wgpu_hal::vulkan::conv] Unrecognized present mode 1000361000
+[2026-09-23T18:50:32Z WARN  wgpu_hal::vulkan::conv] Unrecognized present mode 1000361000
+[2026-09-23T18:50:32Z INFO  wgpu_core::device::resource] Device::maintain: waiting for submission index 0
+[2026-09-23T18:50:33Z INFO  ker_engine::demo] Window created with wgpu surface rendering
+[2026-09-23T18:50:33Z WARN  wgpu_hal::vulkan::conv] Unrecognized present mode 1000361000
+[2026-09-23T18:50:33Z INFO  wgpu_core::device::resource] Device::maintain: waiting for submission index 0
+[2026-09-23T18:50:33Z WARN  wgpu_hal::vulkan::conv] Unrecognized present mode 1000361000
+[2026-09-23T18:50:33Z INFO  wgpu_core::device::resource] Device::maintain: waiting for submission index 0
+[2026-09-23T18:50:33Z WARN  wgpu_hal::vulkan::conv] Unrecognized present mode 1000361000
+[2026-09-23T18:50:33Z INFO  wgpu_core::device::resource] Device::maintain: waiting for submission index 0
+[2026-09-23T18:50:33Z ERROR wgpu::backend::wgpu_core] Handling wgpu errors as fatal by default
+
+thread 'main' (27244) panicked at C:\Users\Ker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wgpu-22.1.0\src\bac
+kend\wgpu_core.rs:3411:5:
+wgpu error: Validation Error
+
+Caused by:
+  In Queue::write_buffer
+    Copy of 0..1719504 would end up overrunning the bounds of the Destination buffer of size 1048576
+
+
+stack backtrace:
+   0: std::panicking::panic_handler
+             at /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library\std\src\panicking.rs:679
+   1: core::panicking::panic_fmt
+             at /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library\core\src\panicking.rs:80
+   2: core::ptr::drop_glue::<wgpu_core::device::RenderPassCompatibilityError>
+   3: <wgpu_core::command::compute::ComputePassErrorInner as core::error::Error>::cause
+   4: <wgpu::backend::wgpu_core::ContextWgpuCore as wgpu::context::Context>::queue_write_buffer
+   5: <wgpu::backend::wgpu_core::ContextWgpuCore as wgpu::context::DynContext>::queue_write_buffer
+   6: <wgpu::Queue>::write_buffer
+   7: <ker_engine::render::WindowedRenderContext>::draw_quads
+   8: <ker_engine::demo::run_terraria_windowed::TerrariaApp as winit::application::ApplicationHandler>::window_event
+   9: core::ptr::drop_glue::<std::sync::mpmc::waker::Waker>
+  10: <winit::platform_impl::windows::event_loop::runner::EventLoopRunner<winit::platform_impl::windows::event_loop::Us
+erEventPlaceholder>>::catch_unwind::<(), winit::platform_impl::windows::event_loop::public_window_callback_inner::{clos
+ure#4}>
+  11: <winit::platform_impl::windows::event_loop::runner::EventLoopRunner<winit::platform_impl::windows::event_loop::Us
+erEventPlaceholder>>::send_event
+  12: winit::platform_impl::windows::event_loop::public_window_callback_inner::{closure#4}
+  13: <winit::platform_impl::windows::event_loop::runner::EventLoopRunner<winit::platform_impl::windows::event_loop::Us
+erEventPlaceholder>>::catch_unwind::<(), winit::platform_impl::windows::event_loop::public_window_callback_inner::{clos
+ure#4}>
+  14: winit::platform_impl::windows::event_loop::public_window_callback
+  15: CallWindowProcW
+  16: DispatchMessageW
+  17: SendMessageTimeoutW
+  18: KiUserCallbackDispatcher
+  19: NtUserDispatchMessage
+  20: DispatchMessageW
+  21: <winit::platform_impl::windows::event_loop::EventLoop<()>>::run::<<winit::event_loop::EventLoop<()>>::run_app<ker
+_engine::demo::run_terraria_windowed::TerrariaApp>::{closure#0}>
+  22: <ker_engine::demo::TerrariaDemo as ker_engine::demo::Demo>::run
+  23: ker_engine::demo::run_demo
+  24: engine::main
+  25: core::ptr::drop_glue::<env_logger::logger::Env>
+  26: std::rt::lang_start::<core::result::Result<(), anyhow::Error>>::{closure#0}
+  27: std::rt::lang_start_internal::closure$0
+             at /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library\std\src\rt.rs:175
+  28: std::panicking::catch_unwind::do_call
+             at /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library\std\src\panicking.rs:576
+  29: std::panicking::catch_unwind
+             at /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library\std\src\panicking.rs:544
+  30: std::panic::catch_unwind
+             at /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library\std\src\panic.rs:359
+  31: std::rt::lang_start_internal
+             at /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library\std\src\rt.rs:171
+  32: main
+  33: invoke_main
+             at D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl:78
+  34: __scrt_common_main_seh
+             at D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl:288
+  35: BaseThreadInitThunk
+  36: RtlUserThreadStart
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+error: process didn't exit successfully: `target\release\engine.exe run-demo TERRARIA --seed 42` (exit code: 101)
