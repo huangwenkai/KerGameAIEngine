@@ -29,6 +29,7 @@ pub mod story;
 pub mod audio;
 pub mod save;
 pub mod animation;
+pub mod structures;
 
 #[cfg(test)]
 mod replay_tests;
