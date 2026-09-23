@@ -2898,6 +2898,12 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         frame_count: u64,
         start_time: Instant,
         running: bool,
+        // NPCs with needs + animations
+        npcs: Vec<(crate::needs::NpcAgent, crate::animation::Animator)>,
+        goal_selector: crate::needs::GoalSelector,
+        water_sources: Vec<(i32, i32)>,
+        food_sources: Vec<(i32, i32)>,
+        bed_locations: Vec<(i32, i32)>,
         // Input state
         move_left: bool,
         move_right: bool,
@@ -2906,6 +2912,50 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         dig_pressed: bool,
         place_pressed: bool,
     }
+    
+    // Scan for water/food/beds for NPCs
+    let mut water_sources = Vec::new();
+    let mut food_sources = Vec::new();
+    let mut bed_locations = Vec::new();
+    
+    for y in -30..30 {
+        for x in -60..60 {
+            let mat = engine.chunk_world.get_cell(x, y);
+            if mat == crate::chunk::Material::Water && water_sources.len() < 5 {
+                water_sources.push((x, y));
+            } else if matches!(mat, crate::chunk::Material::Stone | crate::chunk::Material::Dirt) {
+                let above = engine.chunk_world.get_cell(x, y - 1);
+                if above == crate::chunk::Material::Air && food_sources.len() < 5 {
+                    food_sources.push((x, y));
+                }
+            }
+        }
+    }
+    
+    // Place bed markers if none found
+    if bed_locations.is_empty() {
+        for i in 0..3 {
+            let bx = -20 + i * 15;
+            let by = 0;
+            bed_locations.push((bx, by));
+        }
+    }
+    
+    // Spawn 3 NPCs near spawn
+    let mut npcs = Vec::new();
+    for i in 0..3 {
+        let npc_x = (spawn_x / 4.0 + (i as f32 - 1.0) * 10.0) as f32;
+        let npc_y = (spawn_y / 4.0) as f32;
+        let mut agent = crate::needs::NpcAgent::new(format!("Villager_{}", i), npc_x, npc_y);
+        agent.needs.thirst.decay_rate = 0.02; // Faster for demo
+        agent.needs.hunger.decay_rate = 0.01;
+        let animator = crate::character::create_humanoid_animator();
+        npcs.push((agent, animator));
+    }
+    
+    log::info!("Spawned {} NPCs near player", npcs.len());
+    
+    let goal_selector = crate::needs::GoalSelector::new();
     
     let game_state = Rc::new(RefCell::new(GameState {
         player_motor,
@@ -2927,6 +2977,11 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         frame_count: 0,
         start_time: Instant::now(),
         running: true,
+        npcs,
+        goal_selector,
+        water_sources,
+        food_sources,
+        bed_locations,
         move_left: false,
         move_right: false,
         jump_pressed: false,
@@ -3125,6 +3180,40 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                                 }
                             }
                             
+                            // NPCs (villagers with needs)
+                            for (npc, _animator) in &state.npcs {
+                                let nx = (npc.x - view_x) * cell_size;
+                                let ny = (npc.y - view_y) * cell_size;
+                                
+                                // NPC body (blue to distinguish from enemies)
+                                quads.push(crate::render::QuadInstance {
+                                    x: nx,
+                                    y: ny,
+                                    width: 10.0,
+                                    height: 14.0,
+                                    color: [0.3, 0.5, 0.9, 1.0], // Blue villager
+                                });
+                                
+                                // Needs indicator above head
+                                let urgent = npc.needs.most_urgent();
+                                let need_color = match urgent.need_type {
+                                    crate::needs::NeedType::Thirst => [0.3, 0.7, 1.0, 1.0], // Cyan
+                                    crate::needs::NeedType::Hunger => [1.0, 0.7, 0.3, 1.0], // Orange
+                                    crate::needs::NeedType::Sleep => [0.7, 0.3, 1.0, 1.0],  // Purple
+                                };
+                                
+                                // Only show if urgent
+                                if urgent.value > 0.5 {
+                                    quads.push(crate::render::QuadInstance {
+                                        x: nx + 2.0,
+                                        y: ny - 6.0,
+                                        width: 6.0,
+                                        height: 2.0,
+                                        color: need_color,
+                                    });
+                                }
+                            }
+                            
                             // World items
                             for item in state.world_items.items.iter() {
                                 let ix = (item.x / 4.0 - view_x) * cell_size;
@@ -3224,6 +3313,61 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                 if let Some(player_entity) = state.combat.get_entity_mut(player_id) {
                     player_entity.x = player_x;
                     player_entity.y = player_y;
+                }
+                
+                // Update NPCs: needs, goals, movement, animations
+                let water = state.water_sources.first().copied();
+                let food = state.food_sources.first().copied();
+                let bed = state.bed_locations.first().copied();
+                let selector_copy = state.goal_selector.clone();
+                
+                for (npc, animator) in &mut state.npcs {
+                    npc.update(dt, &selector_copy);
+                    
+                    // Find target if needed
+                    if npc.target.is_none() && npc.current_goal != crate::needs::GoalType::Idle {
+                        let target = match npc.current_goal {
+                            crate::needs::GoalType::FindWater => {
+                                water.map(|(x, y)| crate::needs::Target {
+                                    x, y, goal: crate::needs::GoalType::FindWater
+                                })
+                            }
+                            crate::needs::GoalType::FindFood => {
+                                food.map(|(x, y)| crate::needs::Target {
+                                    x, y, goal: crate::needs::GoalType::FindFood
+                                })
+                            }
+                            crate::needs::GoalType::FindBed => {
+                                bed.map(|(x, y)| crate::needs::Target {
+                                    x, y, goal: crate::needs::GoalType::FindBed
+                                })
+                            }
+                            crate::needs::GoalType::Idle => None,
+                        };
+                        npc.target = target;
+                    }
+                    
+                    // Move and act
+                    if let Some(target) = npc.target.clone() {
+                        npc.move_toward(target.x, target.y, 5.0, dt);
+                        
+                        if npc.reached_target(target.x, target.y) {
+                            npc.execute_action(target.goal);
+                            npc.target = None;
+                        }
+                    }
+                    
+                    // Update animation based on movement
+                    let is_moving = npc.target.is_some();
+                    let current_clip = animator.current_state.as_ref().map(|s| s.clip_name.as_str());
+                    
+                    if is_moving && current_clip != Some("walk") {
+                        let _ = animator.play("walk");
+                    } else if !is_moving && current_clip != Some("idle") {
+                        let _ = animator.play("idle");
+                    }
+                    
+                    animator.update(dt);
                 }
                 
                 // Mouse world coordinates via camera
