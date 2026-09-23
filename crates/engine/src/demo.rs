@@ -2342,7 +2342,7 @@ impl Demo for ShowcaseDemo {
                    total_ticks, total_elapsed.as_millis(), total_ticks as f32 / 60.0);
         log::info!("  Average: {:.2}ms per tick", total_elapsed.as_millis() as f64 / total_ticks as f64);
         log::info!("  Replay hash: {}", engine.replay_hash());
-        log::info!("\n✓ All features showcased: M0-M18 + Terraria playable demo!");
+        log::info!("\n✓ All features showcased: M0-M20 + Terraria playable demo!");
         
         Ok(())
     }
