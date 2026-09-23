@@ -1928,9 +1928,9 @@ impl Demo for M21Demo {
             }
             
             // Update biome spread
-            let cells_before = count_cells(&engine.chunk_world);
+            let cells_before = count_cells(&mut engine.chunk_world);
             biome_spread.update(dt, &mut engine.chunk_world, &mut engine.rng);
-            let cells_after = count_cells(&engine.chunk_world);
+            let cells_after = count_cells(&mut engine.chunk_world);
             
             if cells_before != cells_after {
                 spread_count += 1;
