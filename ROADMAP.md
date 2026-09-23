@@ -202,7 +202,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M12: 剧情/事件
+### M12: 剧情/事件 ✓ COMPLETE (2026-09-23)
 **目标**: 动态叙事
 - 事件触发器
 - 剧情节点
@@ -215,7 +215,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M13: 音频/UI
+### M13: 音频/UI ✓ COMPLETE (2026-09-23)
 **目标**: 完善交互
 - 音效播放 (rodio)
 - UI框架 (egui)
