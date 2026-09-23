@@ -21,6 +21,7 @@ pub mod physics;
 pub mod automata;
 pub mod lighting;
 pub mod items;
+pub mod combat;
 
 #[cfg(test)]
 mod replay_tests;

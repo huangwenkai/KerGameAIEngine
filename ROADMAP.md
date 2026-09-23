@@ -164,7 +164,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M9: 战斗/掉落
+### M9: 战斗/掉落 🚧 IN PROGRESS
 **目标**: Diablo风格战斗
 - Combat系统 (伤害计算，暴击，元素伤害)
 - 敌人AI (追逐，攻击)

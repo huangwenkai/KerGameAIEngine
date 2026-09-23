@@ -1058,6 +1058,170 @@ impl Demo for M8Demo {
     }
 }
 
+/// M9 demo: Combat + loot
+pub struct M9Demo;
+
+impl Demo for M9Demo {
+    fn id(&self) -> &str {
+        "M9"
+    }
+
+    fn description(&self) -> &str {
+        "M9 combat: damage/health/death, attack commands, loot drops"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M9 demo: {}", self.description());
+        
+        // Setup item registry
+        let mut registry = crate::items::ItemRegistry::new();
+        let sword_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_weapon(sword_id, "Sword", 15, crate::items::Rarity::Common));
+        let potion_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_consumable(potion_id, "Potion", crate::items::Rarity::Common, 99));
+        let gold_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_material(gold_id, "Gold", 9999));
+        
+        // Setup combat system
+        let mut combat = crate::combat::CombatSystem::new();
+        let mut world_items = crate::items::WorldItems::new();
+        let mut rng = crate::rng::GameRng::new(engine.config.seed);
+        
+        // Phase 1: Spawn combatants (100 ticks)
+        log::info!("Phase 1: Spawn 50 enemies (100 ticks)");
+        
+        let player = combat.spawn_entity("Player", 50.0, 50.0, 1000, 50, 50);
+        
+        let mut enemy_ids = Vec::new();
+        for i in 0..50 {
+            let x = 100.0 + (i % 10) as f32 * 20.0;
+            let y = 100.0 + (i / 10) as f32 * 20.0;
+            let health = 20 + rng.gen_range(0..=20);
+            let damage = 5 + rng.gen_range(0..=10);
+            let armor = rng.gen_range(0..=5);
+            
+            let enemy_id = combat.spawn_entity(&format!("Enemy{}", i), x, y, health, damage, armor);
+            
+            // Setup loot tables
+            if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+                let rarity = match rng.gen_u32() % 5 {
+                    0 => crate::items::Rarity::Uncommon,
+                    1 => crate::items::Rarity::Rare,
+                    _ => crate::items::Rarity::Common,
+                };
+                enemy.loot_table = crate::combat::generate_loot_table(rarity, &[sword_id, potion_id, gold_id]);
+            }
+            
+            enemy_ids.push(enemy_id);
+        }
+        
+        for _tick in 0..100 {
+            engine.tick()?;
+        }
+        
+        log::info!("After phase 1: {} combatants", combat.entity_count());
+        
+        // Phase 2: Combat (400 ticks)
+        log::info!("Phase 2: Combat (400 ticks)");
+        let mut kills = 0;
+        let mut total_damage_dealt = 0;
+        
+        for tick in 100..500 {
+            engine.tick()?;
+            
+            // Player attacks random living enemy
+            if tick % 3 == 0 {
+                let alive_enemies: Vec<_> = enemy_ids.iter()
+                    .filter(|&&id| combat.get_entity(id).map_or(false, |e| e.is_alive()))
+                    .copied()
+                    .collect();
+                
+                if !alive_enemies.is_empty() {
+                    let target = alive_enemies[rng.gen_range(0..alive_enemies.len())];
+                    if let Some(damage) = combat.attack(player, target) {
+                        total_damage_dealt += damage;
+                    }
+                }
+            }
+            
+            // Enemies attack player occasionally (much less frequent)
+            if tick % 50 == 0 && tick < 300 { // Stop attacking after tick 300
+                for &enemy_id in &enemy_ids {
+                    if combat.get_entity(enemy_id).map_or(false, |e| e.is_alive()) {
+                        if rng.gen_f32() < 0.2 { // Only 20% chance
+                            combat.attack(enemy_id, player);
+                        }
+                    }
+                }
+            }
+            
+            // Remove dead and drop loot
+            let dead = combat.remove_dead();
+            for entity in dead {
+                kills += 1;
+                let loot = entity.loot_table.roll_loot(&mut rng);
+                for stack in loot {
+                    world_items.drop_item(entity.x, entity.y, stack);
+                }
+            }
+        }
+        
+        log::info!("After phase 2: {} kills, {} damage dealt, {} items dropped", 
+                   kills, total_damage_dealt, world_items.item_count());
+        
+        // Phase 3: Loot collection (100 ticks)
+        log::info!("Phase 3: Collect loot (100 ticks)");
+        let mut inventory = crate::items::Inventory::new(30);
+        let mut collected = 0;
+        
+        for tick in 500..600 {
+            engine.tick()?;
+            
+            if let Some(player_entity) = combat.get_entity(player) {
+                if tick % 2 == 0 {
+                    if let Some(stack) = world_items.pickup_near(player_entity.x, player_entity.y, 500.0) {
+                        if inventory.add_item(stack, &registry).is_ok() {
+                            collected += 1;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Calculate final stats
+        let player_entity = combat.get_entity(player).expect("Player should exist");
+        let player_health = player_entity.stats.health_percent();
+        let player_alive = player_entity.is_alive();
+        
+        let mut swords = 0;
+        let mut potions = 0;
+        let mut gold = 0;
+        
+        for i in 0..inventory.slot_count() {
+            if let Some(stack) = inventory.get_slot(i) {
+                match stack.def_id {
+                    id if id == sword_id => swords += stack.count,
+                    id if id == potion_id => potions += stack.count,
+                    id if id == gold_id => gold += stack.count,
+                    _ => {}
+                }
+            }
+        }
+        
+        log::info!("M9 demo completed: {} ticks", engine.tick_count());
+        log::info!("Player health: {:.0}% (alive: {})", player_health * 100.0, player_alive);
+        log::info!("Enemies killed: {}", kills);
+        log::info!("Total damage dealt: {}", total_damage_dealt);
+        log::info!("Loot collected: {} items", collected);
+        log::info!("Inventory: {} swords, {} potions, {} gold", swords, potions, gold);
+        
+        assert!(kills > 0, "Should have killed some enemies (got {})", kills);
+        assert!(total_damage_dealt > 50, "Should have dealt damage");
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -1079,6 +1243,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M6Demo));
         registry.demos.push(Box::new(M7Demo));
         registry.demos.push(Box::new(M8Demo));
+        registry.demos.push(Box::new(M9Demo));
         
         registry
     }
