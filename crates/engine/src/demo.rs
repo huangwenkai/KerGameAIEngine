@@ -2898,6 +2898,8 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         frame_count: u64,
         start_time: Instant,
         running: bool,
+        // Player animator
+        player_animator: crate::animation::Animator,
         // NPCs with needs + animations
         npcs: Vec<(crate::needs::NpcAgent, crate::animation::Animator)>,
         goal_selector: crate::needs::GoalSelector,
@@ -2908,6 +2910,7 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         move_left: bool,
         move_right: bool,
         jump_pressed: bool,
+        shift_pressed: bool,
         mouse_pos: (f32, f32),
         dig_pressed: bool,
         place_pressed: bool,
@@ -2956,6 +2959,8 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
     log::info!("Spawned {} NPCs near player", npcs.len());
     
     let goal_selector = crate::needs::GoalSelector::new();
+    let mut player_animator = crate::character::create_humanoid_animator();
+    let _ = player_animator.play("idle");
     
     let game_state = Rc::new(RefCell::new(GameState {
         player_motor,
@@ -2977,6 +2982,7 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         frame_count: 0,
         start_time: Instant::now(),
         running: true,
+        player_animator,
         npcs,
         goal_selector,
         water_sources,
@@ -2985,6 +2991,7 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         move_left: false,
         move_right: false,
         jump_pressed: false,
+        shift_pressed: false,
         mouse_pos: (0.0, 0.0),
         dig_pressed: false,
         place_pressed: false,
@@ -3149,19 +3156,52 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                                 }
                             }
                             
-                            // Player
-                            let player_screen_x = (state.player_motor.aabb.x / 4.0 - view_x) * cell_size;
-                            let player_screen_y = (state.player_motor.aabb.y / 4.0 - view_y) * cell_size;
-                            let player_w = state.player_motor.aabb.width / 4.0 * cell_size;
-                            let player_h = state.player_motor.aabb.height / 4.0 * cell_size;
+                            // Player - Render as bone skeleton
+                            let player_x_cells = state.player_motor.aabb.x / 4.0;
+                            let player_y_cells = state.player_motor.aabb.y / 4.0;
                             
-                            quads.push(crate::render::QuadInstance {
-                                x: player_screen_x,
-                                y: player_screen_y,
-                                width: player_w,
-                                height: player_h,
-                                color: [0.0, 1.0, 0.0, 1.0], // Green
-                            });
+                            state.player_animator.skeleton.update_world_transforms();
+                            
+                            // Draw each bone as colored quad
+                            for bone in &state.player_animator.skeleton.bones {
+                                let bone_world_x = player_x_cells + bone.world_transform.x;
+                                let bone_world_y = player_y_cells + bone.world_transform.y;
+                                
+                                let bone_screen_x = (bone_world_x - view_x) * cell_size;
+                                let bone_screen_y = (bone_world_y - view_y) * cell_size;
+                                
+                                let (bone_width, bone_height) = if bone.name == "head" {
+                                    (3.0, 3.0)
+                                } else if bone.name == "torso" {
+                                    (2.0, 6.0)
+                                } else if bone.name.contains("upper") {
+                                    (1.5, 4.0)
+                                } else if bone.name.contains("lower") {
+                                    (1.5, 4.0)
+                                } else {
+                                    (1.0, 1.0)
+                                };
+                                
+                                let color = if bone.name == "head" {
+                                    [0.9, 0.7, 0.6, 1.0] // Skin
+                                } else if bone.name == "torso" {
+                                    [0.3, 0.7, 0.3, 1.0] // Green shirt (player)
+                                } else if bone.name.contains("arm") {
+                                    [0.9, 0.7, 0.6, 1.0] // Skin
+                                } else if bone.name.contains("leg") {
+                                    [0.2, 0.4, 0.6, 1.0] // Blue pants
+                                } else {
+                                    [0.5, 0.5, 0.5, 1.0]
+                                };
+                                
+                                quads.push(crate::render::QuadInstance {
+                                    x: bone_screen_x,
+                                    y: bone_screen_y,
+                                    width: bone_width * cell_size,
+                                    height: bone_height * cell_size,
+                                    color,
+                                });
+                            }
                             
                             // Enemies
                             for &enemy_id in &state.enemy_ids {
@@ -3305,6 +3345,24 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                 }
                 state.player_motor.apply_friction(dt);
                 state.player_motor.update(dt, &mut engine.chunk_world);
+                
+                // Update player animation based on input
+                let is_on_ground = state.player_motor.on_ground;
+                let is_moving = move_dir != 0.0;
+                let is_running = is_moving && state.shift_pressed;
+                let current_clip = state.player_animator.current_state.as_ref().map(|s| s.clip_name.as_str());
+                
+                if !is_on_ground && current_clip != Some("jump") {
+                    let _ = state.player_animator.play("jump");
+                } else if is_running && current_clip != Some("run") {
+                    let _ = state.player_animator.play("run");
+                } else if is_moving && current_clip != Some("walk") {
+                    let _ = state.player_animator.play("walk");
+                } else if is_on_ground && !is_moving && current_clip != Some("idle") {
+                    let _ = state.player_animator.play("idle");
+                }
+                
+                state.player_animator.update(dt);
                 
                 // Update combat entity position
                 let player_x = state.player_motor.aabb.center_x();
