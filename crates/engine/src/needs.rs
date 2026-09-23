@@ -204,6 +204,7 @@ pub enum GoalType {
 }
 
 /// Goal selector for utility AI
+#[derive(Debug, Clone)]
 pub struct GoalSelector {
     /// Thresholds for goal activation
     pub thirst_threshold: f32,
