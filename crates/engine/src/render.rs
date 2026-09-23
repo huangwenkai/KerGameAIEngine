@@ -13,6 +13,104 @@ pub struct RenderContext {
     pub height: u32,
 }
 
+/// Windowed render context (includes window + surface)
+pub struct WindowedRenderContext {
+    pub window: std::sync::Arc<winit::window::Window>,
+    pub surface: wgpu::Surface<'static>,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub surface_config: wgpu::SurfaceConfiguration,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl WindowedRenderContext {
+    /// Create windowed render context with winit window
+    pub async fn new(event_loop: &winit::event_loop::EventLoop<()>, width: u32, height: u32) -> Result<Self> {
+        log::info!("Initializing windowed render context ({}×{})", width, height);
+        
+        use winit::window::WindowAttributes;
+        
+        let window_attrs = WindowAttributes::default()
+            .with_title("KerGameAIEngine - SHOWCASE")
+            .with_inner_size(winit::dpi::PhysicalSize::new(width, height))
+            .with_resizable(false);
+        
+        let window = std::sync::Arc::new(event_loop.create_window(window_attrs)?);
+        
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        
+        let surface = instance.create_surface(window.clone())?;
+        
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                force_fallback_adapter: false,
+                compatible_surface: Some(&surface),
+            })
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Failed to find suitable GPU adapter. Try running with --headless flag."))?;
+        
+        log::info!("Using GPU adapter: {:?}", adapter.get_info());
+        
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: Some("Windowed Device"),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
+                    memory_hints: Default::default(),
+                },
+                None,
+            )
+            .await?;
+        
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps.formats.iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(surface_caps.formats[0]);
+        
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width,
+            height,
+            present_mode: wgpu::PresentMode::Fifo, // VSync
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+        
+        surface.configure(&device, &surface_config);
+        
+        Ok(Self {
+            window,
+            surface,
+            device,
+            queue,
+            surface_config,
+            width,
+            height,
+        })
+    }
+    
+    /// Get next surface texture for rendering
+    pub fn get_current_texture(&self) -> Result<wgpu::SurfaceTexture> {
+        self.surface
+            .get_current_texture()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire surface texture: {:?}", e))
+    }
+    
+    /// Request window redraw
+    pub fn request_redraw(&self) {
+        self.window.request_redraw();
+    }
+}
+
 impl RenderContext {
     /// Create headless render context (renders to texture)
     pub async fn new_headless(width: u32, height: u32) -> Result<Self> {
@@ -190,8 +288,8 @@ pub struct SpriteVertex {
 
 /// Sprite batch renderer
 pub struct SpriteBatch {
-    vertices: Vec<SpriteVertex>,
-    indices: Vec<u16>,
+    pub vertices: Vec<SpriteVertex>,
+    pub indices: Vec<u16>,
 }
 
 impl SpriteBatch {
