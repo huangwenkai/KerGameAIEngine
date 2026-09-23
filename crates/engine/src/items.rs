@@ -210,6 +210,7 @@ impl Inventory {
 }
 
 /// Item registry (database of all item definitions)
+#[derive(Debug, Clone)]
 pub struct ItemRegistry {
     items: HashMap<ItemId, ItemDef>,
     next_id: ItemId,
