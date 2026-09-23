@@ -38,7 +38,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ## 里程碑详细设计 / Milestone Breakdown
 
-### M0: 脚手架 + CLI + 无头测试框架 ✓ COMPLETE
+### M0: 脚手架 + CLI + 无头测试框架 ✓ COMPLETE (2026-09-23)
 **目标**: 验证基础设施可运行
 - Rust workspace结构
 - CLI: `engine run-demo M0 --headless --seed 42 --report out.json`
