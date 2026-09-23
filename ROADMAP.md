@@ -243,11 +243,27 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ## Demo设计原则
 
+### Milestone Demos (M0-M14)
+
 1. **短而精**: 5–15秒典型运行时长
 2. **自验证**: Demo内部断言关键不变量
 3. **确定性**: 相同seed必须产生相同结果
 4. **报告驱动**: 所有验证指标输出到JSON
 5. **AI自测**: 人类不手动测试中间产物，AI全自动验证
+
+### SHOWCASE Demo (Unified Experience)
+
+**SHOWCASE is the primary human experience entrypoint.**
+
+- **Purpose**: Quick (~30-40s) unified tour of ALL engine features
+- **Structure**: Short chapters (2-5s each) covering every implemented system
+- **Rule**: **When a new feature/milestone ships, it MUST also get a chapter in SHOWCASE**
+- **Priority**: Listed first in `list-demos`, tested in all PRs
+- **Documentation**: See `SHOWCASE.md` for full guide
+
+SHOWCASE complements milestone demos:
+- **SHOWCASE**: Human experience, integration, completeness check
+- **M* Demos**: Automated gates, isolated feature validation
 
 ## 技术债务管理
 

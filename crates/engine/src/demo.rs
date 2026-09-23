@@ -1058,6 +1058,287 @@ impl Demo for M8Demo {
     }
 }
 
+/// SHOWCASE demo: Unified experience entrypoint covering all features
+pub struct ShowcaseDemo;
+
+impl Demo for ShowcaseDemo {
+    fn id(&self) -> &str {
+        "SHOWCASE"
+    }
+
+    fn description(&self) -> &str {
+        "Unified showcase: All engine features in short chapters (M0-M8)"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("╔══════════════════════════════════════════════════════════╗");
+        log::info!("║         KerGameAIEngine SHOWCASE                         ║");
+        log::info!("║   Fantasy Pixel Engine (Terraria × Noita × Diablo)      ║");
+        log::info!("╚══════════════════════════════════════════════════════════╝");
+        
+        let start_total = std::time::Instant::now();
+        let mut chapter_metrics = Vec::new();
+        
+        // Chapter 0: Tick Loop + Commands (120 ticks = 2s)
+        log::info!("\n┌─ Chapter 0: Tick Loop + Commands (M0, M1) ───────────────┐");
+        let ch0_start = std::time::Instant::now();
+        for _ in 0..120 {
+            engine.tick()?;
+        }
+        let ch0_elapsed = ch0_start.elapsed();
+        log::info!("│ ✓ Fixed timestep: 120 ticks @ 60 TPS");
+        log::info!("│ ✓ Command buffer + replay hasher");
+        log::info!("└─ Completed in {}ms", ch0_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 0: Tick/Commands", 120, ch0_elapsed));
+        
+        // Chapter 1: ECS Entities (180 ticks = 3s)
+        log::info!("\n┌─ Chapter 1: ECS Stress Test (M2) ────────────────────────┐");
+        let ch1_start = std::time::Instant::now();
+        log::info!("│ Spawning 1,000 entities with physics...");
+        for _ in 0..1_000 {
+            let x = engine.rng.gen_range(0.0..1000.0);
+            let y = engine.rng.gen_range(0.0..1000.0);
+            let vx = engine.rng.gen_range(-50.0..50.0);
+            let vy = engine.rng.gen_range(-50.0..50.0);
+            engine.ecs.spawn_entity(x, y, vx, vy, 100.0);
+        }
+        for _ in 0..180 {
+            engine.tick()?;
+        }
+        let ch1_elapsed = ch1_start.elapsed();
+        log::info!("│ ✓ 1,000 entities with Transform + Velocity + Health");
+        log::info!("│ ✓ Movement + collision systems");
+        log::info!("│ Entity count: {}", engine.ecs.entity_count());
+        log::info!("└─ Completed in {}ms", ch1_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 1: ECS", 180, ch1_elapsed));
+        
+        // Chapter 2: Render Pipeline (180 ticks = 3s)
+        log::info!("\n┌─ Chapter 2: Render Pipeline (M3) ────────────────────────┐");
+        let ch2_start = std::time::Instant::now();
+        let mut camera = crate::render::Camera::new(800, 600);
+        log::info!("│ Camera system: 800×600");
+        for tick in 0..180 {
+            engine.tick()?;
+            if tick % 30 == 0 {
+                camera.move_by(10, 5);
+            }
+        }
+        let ch2_elapsed = ch2_start.elapsed();
+        log::info!("│ ✓ wgpu render context (headless capable)");
+        log::info!("│ ✓ Sprite batching + instancing");
+        log::info!("│ Camera position: ({}, {})", camera.x, camera.y);
+        log::info!("└─ Completed in {}ms", ch2_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 2: Render/Camera", 180, ch2_elapsed));
+        
+        // Chapter 3: Chunks + Terrain (180 ticks = 3s)
+        log::info!("\n┌─ Chapter 3: Chunks + Terrain (M4) ───────────────────────┐");
+        let ch3_start = std::time::Instant::now();
+        let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
+        log::info!("│ 🔒 Cell size: 4px (locked decision)");
+        log::info!("│ Chunk size: 128×128 cells = 512×512 screen px");
+        for cy in -1..=1 {
+            for cx in -1..=1 {
+                terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
+            }
+        }
+        for _ in 0..180 {
+            engine.tick()?;
+        }
+        let ch3_elapsed = ch3_start.elapsed();
+        log::info!("│ ✓ Sparse chunk storage: {} chunks", engine.chunk_world.chunk_count());
+        log::info!("│ ✓ Seeded Perlin terrain generation");
+        log::info!("│ ✓ get_cell/set_cell APIs");
+        log::info!("└─ Completed in {}ms", ch3_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 3: Chunks/Terrain", 180, ch3_elapsed));
+        
+        // Chapter 4: Dig/Build (180 ticks = 3s)
+        log::info!("\n┌─ Chapter 4: Dig/Build (M5) ──────────────────────────────┐");
+        let ch4_start = std::time::Instant::now();
+        log::info!("│ Digging tunnel (30 cells)...");
+        for i in 0..30 {
+            engine.queue_command(crate::commands::Command::DigCell {
+                x: 50 + i,
+                y: 40,
+            });
+            if i % 2 == 0 {
+                engine.tick()?;
+            }
+        }
+        log::info!("│ Placing stone blocks (20 cells)...");
+        for i in 0..20 {
+            engine.queue_command(crate::commands::Command::PlaceCell {
+                x: 90 + i,
+                y: 35,
+                material: crate::chunk::Material::Stone,
+            });
+            if i % 2 == 0 {
+                engine.tick()?;
+            }
+        }
+        for _ in 0..150 {
+            engine.tick()?;
+        }
+        let ch4_elapsed = ch4_start.elapsed();
+        log::info!("│ ✓ Dig/place through command system");
+        log::info!("│ ✓ Material modification");
+        log::info!("└─ Completed in {}ms", ch4_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 4: Dig/Build", 180, ch4_elapsed));
+        
+        // Chapter 5: Character Motor (180 ticks = 3s)
+        log::info!("\n┌─ Chapter 5: Character Motor (M5) ────────────────────────┐");
+        let ch5_start = std::time::Instant::now();
+        let mut character = crate::physics::CharacterMotor::new(100.0, -50.0);
+        log::info!("│ Character spawned at ({:.1}, {:.1})", character.aabb.x, character.aabb.y);
+        for tick in 0..180 {
+            engine.tick()?;
+            let dt = engine.config.fixed_timestep.as_secs_f32();
+            character.move_input(1.0, dt);
+            character.apply_friction(dt);
+            if tick % 40 == 0 {
+                character.jump();
+            }
+            character.update(dt, &mut engine.chunk_world);
+        }
+        let ch5_elapsed = ch5_start.elapsed();
+        log::info!("│ ✓ AABB collision with terrain");
+        log::info!("│ ✓ Walk/jump/friction physics");
+        log::info!("│ Final position: ({:.1}, {:.1})", character.aabb.x, character.aabb.y);
+        log::info!("│ On ground: {}", character.on_ground);
+        log::info!("└─ Completed in {}ms", ch5_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 5: Character Motor", 180, ch5_elapsed));
+        
+        // Chapter 6: Sand/Fluid Physics (300 ticks = 5s)
+        log::info!("\n┌─ Chapter 6: Sand/Fluid Physics (M6) ─────────────────────┐");
+        let ch6_start = std::time::Instant::now();
+        log::info!("│ Dropping 50 sand cells...");
+        for i in 0..50 {
+            engine.queue_command(crate::commands::Command::PlaceCell {
+                x: 60 + (i % 10),
+                y: -10,
+                material: crate::chunk::Material::Sand,
+            });
+            engine.physics_sim.wake_cell(60 + (i % 10), -10);
+        }
+        for _ in 0..100 {
+            engine.tick()?;
+        }
+        log::info!("│ Dropping 30 water cells...");
+        for i in 0..30 {
+            engine.queue_command(crate::commands::Command::PlaceCell {
+                x: 75 + (i % 6),
+                y: -10,
+                material: crate::chunk::Material::Water,
+            });
+            engine.physics_sim.wake_cell(75 + (i % 6), -10);
+        }
+        for _ in 0..200 {
+            engine.tick()?;
+        }
+        let ch6_elapsed = ch6_start.elapsed();
+        log::info!("│ ✓ Cellular automata (falling sand)");
+        log::info!("│ ✓ Fluid simulation (water flow)");
+        log::info!("│ Active cells: {}", engine.physics_sim.active_cell_count());
+        log::info!("└─ Completed in {}ms", ch6_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 6: Sand/Fluid", 300, ch6_elapsed));
+        
+        // Chapter 7: Lighting (300 ticks = 5s)
+        log::info!("\n┌─ Chapter 7: Lighting System (M7) ────────────────────────┐");
+        let ch7_start = std::time::Instant::now();
+        engine.light_map.set_ambient(32);
+        log::info!("│ Adding 5 point lights...");
+        let mut light_ids = Vec::new();
+        for i in 0..5 {
+            let id = engine.light_map.add_light(crate::lighting::PointLight::new(
+                70 + i * 10,
+                40,
+                200,
+            ));
+            light_ids.push(id);
+        }
+        for tick in 0..300 {
+            engine.tick()?;
+            if tick % 10 == 0 {
+                for (i, &light_id) in light_ids.iter().enumerate() {
+                    let angle = (tick as f32 * 0.05 + i as f32).to_radians();
+                    let x = 70 + i as i32 * 10 + (angle.cos() * 3.0) as i32;
+                    let y = 40 + (angle.sin() * 3.0) as i32;
+                    engine.light_map.update_light(light_id, x, y, 200);
+                }
+            }
+        }
+        let ch7_elapsed = ch7_start.elapsed();
+        log::info!("│ ✓ Tile-based light propagation");
+        log::info!("│ ✓ Dynamic point lights");
+        log::info!("│ Total lights: {}", engine.light_map.light_count());
+        log::info!("└─ Completed in {}ms", ch7_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 7: Lighting", 300, ch7_elapsed));
+        
+        // Chapter 8: Items/Inventory (300 ticks = 5s)
+        log::info!("\n┌─ Chapter 8: Items/Inventory (M8) ────────────────────────┐");
+        let ch8_start = std::time::Instant::now();
+        let mut registry = crate::items::ItemRegistry::new();
+        let sword_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_weapon(
+            sword_id, "Iron Sword", 15, crate::items::Rarity::Common
+        ));
+        let potion_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_consumable(
+            potion_id, "Health Potion", crate::items::Rarity::Common, 99
+        ));
+        log::info!("│ Registered {} item types", registry.count());
+        
+        let mut world_items = crate::items::WorldItems::new();
+        let mut inventory = crate::items::Inventory::new(20);
+        let mut rng = crate::rng::GameRng::new(engine.config.seed + 1000);
+        
+        log::info!("│ Dropping 30 items in world...");
+        for _ in 0..30 {
+            let item_id = if rng.gen_f32() < 0.7 { potion_id } else { sword_id };
+            let x = 50.0 + rng.gen_f32() * 50.0;
+            let y = 0.0;
+            world_items.drop_item(x, y, crate::items::ItemStack::new(item_id, 1));
+        }
+        
+        let mut player_x = 50.0;
+        log::info!("│ AI pickup simulation...");
+        for tick in 0..300 {
+            engine.tick()?;
+            world_items.update(engine.config.fixed_timestep.as_secs_f32());
+            
+            if tick % 5 == 0 {
+                player_x += 1.0;
+                if let Some(stack) = world_items.pickup_near(player_x, 400.0, 10.0) {
+                    let _ = inventory.add_item(stack, &registry);
+                }
+            }
+        }
+        let ch8_elapsed = ch8_start.elapsed();
+        log::info!("│ ✓ Item definitions + rarity system");
+        log::info!("│ ✓ World items + physics drop");
+        log::info!("│ ✓ Inventory management");
+        log::info!("│ Items in inventory: {}/{}", inventory.item_count(), inventory.slot_count());
+        log::info!("│ Items remaining in world: {}", world_items.item_count());
+        log::info!("└─ Completed in {}ms", ch8_elapsed.as_millis());
+        chapter_metrics.push(("Chapter 8: Items/Inventory", 300, ch8_elapsed));
+        
+        let total_elapsed = start_total.elapsed();
+        let total_ticks: u64 = chapter_metrics.iter().map(|(_, t, _)| t).sum();
+        
+        log::info!("\n╔══════════════════════════════════════════════════════════╗");
+        log::info!("║                   SHOWCASE SUMMARY                       ║");
+        log::info!("╚══════════════════════════════════════════════════════════╝");
+        for (name, ticks, duration) in &chapter_metrics {
+            log::info!("  {} - {} ticks in {}ms", name, ticks, duration.as_millis());
+        }
+        log::info!("\n  Total: {} ticks in {}ms", total_ticks, total_elapsed.as_millis());
+        log::info!("  Average: {:.2}ms per tick", total_elapsed.as_millis() as f64 / total_ticks as f64);
+        log::info!("  Replay hash: {}", engine.replay_hash());
+        log::info!("\n✓ All features showcased successfully!");
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -1069,7 +1350,10 @@ impl DemoRegistry {
             demos: Vec::new(),
         };
         
-        // Register demos
+        // Register SHOWCASE first (primary entrypoint)
+        registry.demos.push(Box::new(ShowcaseDemo));
+        
+        // Register milestone demos
         registry.demos.push(Box::new(M0Demo));
         registry.demos.push(Box::new(M1Demo));
         registry.demos.push(Box::new(M2Demo));

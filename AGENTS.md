@@ -17,12 +17,17 @@
 2. **设计接口**: 先定义公共API和Command类型
 3. **实现核心**: 编写功能代码
 4. **编写Demo**: 创建对应MX Demo
-5. **自测验证**: 
+5. **更新SHOWCASE**: **MANDATORY** - 为新功能在SHOWCASE添加章节
+   - SHOWCASE是人类体验引擎的主要入口
+   - 每个新特性必须在同一PR/commit中更新SHOWCASE
+   - 见SHOWCASE.md了解章节设计指南
+6. **自测验证**: 
    - `cargo build --release`
    - `cargo test`
    - `cargo run --bin engine -- run-demo MX --headless --seed 42 --report test.json`
-   - 检查report.json中`success: true`
-6. **生成报告**: 记录以下内容
+   - `cargo run --bin engine -- run-demo SHOWCASE --headless --seed 42 --report showcase.json`
+   - 检查report.json和showcase.json中`success: true`
+7. **生成报告**: 记录以下内容
    - 实现的功能列表
    - Demo运行结果 (tick_count, elapsed_ms, replay_hash)
    - 性能指标 (fps, 内存使用)
@@ -38,12 +43,32 @@
 
 ### Demo设计规范
 
-每个Demo必须：
+#### Milestone Demos (M0, M1, M2, ...)
+
+每个Milestone Demo必须：
 - 实现`Demo` trait
 - 注册到`DemoRegistry`
 - 运行时长控制在5–15秒 (典型600–900帧@60TPS)
 - 内部assert关键不变量
 - 成功时返回`Ok(())`，失败时返回`Err`
+
+#### SHOWCASE Demo
+
+**特殊规则**: SHOWCASE是主要的人类体验入口
+
+- **用途**: 人类快速体验所有引擎功能的统一入口
+- **结构**: 短章节 (2-5秒) 覆盖所有已实现系统
+- **总时长**: 保持快速 (≤45-60秒模拟时间)
+- **更新频率**: 每当新特性/里程碑完成时必须更新
+- **优先级**: 在`list-demos`中首先列出
+- **测试**: 必须支持headless和确定性执行
+
+当实现新功能时，在同一PR/commit中：
+1. 添加Milestone Demo (如M9Demo)
+2. 在SHOWCASE中添加对应章节
+3. 两者都必须通过headless测试
+
+见`SHOWCASE.md`获取完整指南。
 
 示例：
 ```rust
@@ -131,6 +156,8 @@ diff <(jq .replay_hash run1.json) <(jq .replay_hash run2.json)
 - [ ] Demo实现并注册
 - [ ] Demo headless运行成功
 - [ ] report.json显示success: true
+- [ ] **SHOWCASE更新** - 新功能添加到SHOWCASE Demo
+- [ ] **SHOWCASE测试通过** - showcase.json显示success: true
 - [ ] 性能符合基准或记录差距
 - [ ] 代码有必要注释
 - [ ] Git提交历史清晰
