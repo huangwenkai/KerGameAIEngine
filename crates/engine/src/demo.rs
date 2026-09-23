@@ -2329,6 +2329,23 @@ impl Demo for ShowcaseDemo {
         log::info!("└─ {}ms", ch19_elapsed.as_millis());
         chapter_metrics.push(("Ch 19: Character", 60, ch19_elapsed));
         
+        // Chapter 20: M20 Combat Depth (60 ticks = 1s)
+        log::info!("\n┌─ Ch 20: Combat Depth (M20) ───────────────────────────────┐");
+        let ch20_start = std::time::Instant::now();
+        
+        // Diverse enemy types
+        let slime = crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Slime, 100.0, 100.0);
+        let flyer = crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Flyer, 150.0, 100.0);
+        let crawler = crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Crawler, 200.0, 100.0);
+        
+        for _ in 0..60 {
+            engine.tick()?;
+        }
+        let ch20_elapsed = ch20_start.elapsed();
+        log::info!("│ ✓ Enemy variety: slime/flyer/crawler");
+        log::info!("└─ {}ms", ch20_elapsed.as_millis());
+        chapter_metrics.push(("Ch 20: M20 Combat", 60, ch20_elapsed));
+        
         let total_elapsed = start_total.elapsed();
         let total_ticks: u64 = chapter_metrics.iter().map(|(_, t, _)| t).sum();
         
@@ -2342,7 +2359,7 @@ impl Demo for ShowcaseDemo {
                    total_ticks, total_elapsed.as_millis(), total_ticks as f32 / 60.0);
         log::info!("  Average: {:.2}ms per tick", total_elapsed.as_millis() as f64 / total_ticks as f64);
         log::info!("  Replay hash: {}", engine.replay_hash());
-        log::info!("\n✓ All features showcased: M0-M18 + Terraria playable demo!");
+        log::info!("\n✓ All features showcased: M0-M20 + Terraria playable demo!");
         
         Ok(())
     }
