@@ -63,7 +63,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M2: ECS压力测试
+### M2: ECS压力测试 ✓ COMPLETE (2026-09-23)
 **目标**: 验证ECS性能
 - 轻量级自研ECS (或使用hecs/bevy_ecs库)
 - 组件: Transform, Velocity, Health

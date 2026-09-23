@@ -97,6 +97,70 @@ impl Demo for M1Demo {
     }
 }
 
+/// M2 demo: ECS stress test with 10k entities
+pub struct M2Demo;
+
+impl Demo for M2Demo {
+    fn id(&self) -> &str {
+        "M2"
+    }
+
+    fn description(&self) -> &str {
+        "M2 ECS stress: 10,000 entities with movement + collision systems"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M2 demo: {}", self.description());
+        
+        // Spawn 10,000 entities with random positions and velocities
+        log::info!("Spawning 10,000 entities...");
+        for _ in 0..10_000 {
+            let x = engine.rng.gen_range(0.0..1000.0);
+            let y = engine.rng.gen_range(0.0..1000.0);
+            let vx = engine.rng.gen_range(-50.0..50.0);
+            let vy = engine.rng.gen_range(-50.0..50.0);
+            let health = engine.rng.gen_range(50.0..200.0);
+            
+            engine.ecs.spawn_entity(x, y, vx, vy, health);
+        }
+        
+        log::info!("Entities spawned: {}", engine.ecs.entity_count());
+        assert_eq!(engine.ecs.entity_count(), 10_000);
+        
+        // Simulate for 600 ticks (10 seconds @ 60 TPS)
+        log::info!("Simulating 600 ticks...");
+        let start = std::time::Instant::now();
+        
+        for tick in 0..600 {
+            engine.tick()?;
+            
+            if (tick + 1) % 100 == 0 {
+                log::info!("Tick {}/600 ({}ms elapsed)", 
+                           tick + 1, 
+                           start.elapsed().as_millis());
+            }
+        }
+        
+        let elapsed = start.elapsed();
+        let avg_tick_ms = elapsed.as_secs_f64() * 1000.0 / 600.0;
+        
+        log::info!("M2 demo completed: {} ticks, {} entities",
+                   engine.tick_count(),
+                   engine.ecs.entity_count());
+        log::info!("Performance: {:.3}ms per tick (avg), {:.1} FPS capable",
+                   avg_tick_ms,
+                   1000.0 / avg_tick_ms);
+        log::info!("ECS state hash: {}", engine.ecs.state_hash());
+        
+        // Verify performance target: < 2ms per tick
+        assert!(avg_tick_ms < 2.0, 
+                "Performance target not met: {:.3}ms > 2.0ms per tick", 
+                avg_tick_ms);
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -111,6 +175,7 @@ impl DemoRegistry {
         // Register demos
         registry.demos.push(Box::new(M0Demo));
         registry.demos.push(Box::new(M1Demo));
+        registry.demos.push(Box::new(M2Demo));
         
         registry
     }

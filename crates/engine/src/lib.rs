@@ -13,6 +13,7 @@ pub mod replay;
 pub mod report;
 pub mod rng;
 pub mod state;
+pub mod ecs;
 
 #[cfg(test)]
 mod replay_tests;
@@ -46,6 +47,7 @@ pub struct Engine {
     replay_hasher: replay::ReplayHasher,
     pub rng: rng::GameRng,
     pub world: state::World,
+    pub ecs: ecs::EcsWorld,
 }
 
 impl Engine {
@@ -61,6 +63,7 @@ impl Engine {
             replay_hasher: replay::ReplayHasher::new(seed),
             rng: rng::GameRng::new(seed),
             world: state::World::new(),
+            ecs: ecs::EcsWorld::new(),
         }
     }
 
@@ -74,9 +77,13 @@ impl Engine {
             cmd.apply(&mut self.world);
         }
         
-        // Update physics
+        // Update old world physics (M1)
         let dt = self.config.fixed_timestep.as_secs_f32();
         self.world.update_all(dt);
+        
+        // Update ECS systems (M2)
+        self.ecs.system_movement(dt);
+        self.ecs.system_collision(1000.0); // World bounds: 1000x1000
         
         Ok(())
     }
@@ -86,9 +93,12 @@ impl Engine {
         self.time.tick_count
     }
 
-    /// Get replay hash (combines command hash + final state hash)
+    /// Get replay hash (combines command hash + state hashes)
     pub fn replay_hash(&self) -> String {
-        format!("{}:{}", self.replay_hasher.finalize(), self.world.state_hash())
+        format!("{}:{}:{}", 
+                self.replay_hasher.finalize(), 
+                self.world.state_hash(),
+                self.ecs.state_hash())
     }
 
     /// Queue a command for next tick
