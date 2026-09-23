@@ -23,6 +23,10 @@ pub mod lighting;
 pub mod items;
 pub mod combat;
 pub mod magic;
+pub mod npc;
+pub mod story;
+pub mod audio;
+pub mod save;
 
 #[cfg(test)]
 mod replay_tests;

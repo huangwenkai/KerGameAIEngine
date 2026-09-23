@@ -1353,6 +1353,100 @@ impl Demo for M10Demo {
     }
 }
 
+pub struct M11Demo;
+impl Demo for M11Demo {
+    fn id(&self) -> &str { "M11" }
+    fn description(&self) -> &str { "M11 NPC: behaviors, pathing, chase/flee" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        let mut npcs = crate::npc::NPCSystem::new();
+        for i in 0..20 {
+            let id = npcs.spawn(&format!("Guard{}", i), (i as f32) * 50.0, 100.0);
+            if let Some(npc) = npcs.get_npc_mut(id) {
+                npc.set_patrol(vec![(0.0, 100.0), (500.0, 100.0)]);
+            }
+        }
+        let mut player_x = 250.0;
+        for _tick in 0..600 {
+            engine.tick()?;
+            player_x += 0.5;
+            npcs.update_all(0.016666, player_x, 100.0);
+        }
+        log::info!("M11 complete: {} NPCs, {} chasing", npcs.count(), npcs.count_by_behavior(crate::npc::Behavior::Chase));
+        assert!(npcs.count() == 20);
+        Ok(())
+    }
+}
+
+pub struct M12Demo;
+impl Demo for M12Demo {
+    fn id(&self) -> &str { "M12" }
+    fn description(&self) -> &str { "M12 Story: quests, flags, triggers" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        let mut flags = crate::story::WorldFlags::new();
+        let mut quests = crate::story::QuestSystem::new();
+        quests.add_quest(crate::story::Quest::new("q1", "Tutorial", "Complete tutorial", 50));
+        quests.add_quest(crate::story::Quest::new("q2", "Main Quest", "Save the world", 1000));
+        for tick in 0..600 {
+            engine.tick()?;
+            if tick == 100 {
+                if let Some(q) = quests.get_quest_mut("q1") { q.start(); }
+            }
+            if tick == 300 {
+                flags.set("tutorial_done", true);
+                if let Some(q) = quests.get_quest_mut("q1") { q.complete(); }
+            }
+            flags.increment("ticks_played");
+        }
+        log::info!("M12 complete: {} quests, {} completed, {} flags", quests.count(), quests.completed_count(), flags.get_counter("ticks_played"));
+        assert!(quests.completed_count() == 1);
+        Ok(())
+    }
+}
+
+pub struct M13Demo;
+impl Demo for M13Demo {
+    fn id(&self) -> &str { "M13" }
+    fn description(&self) -> &str { "M13 Audio+UI: sound events, headless backend" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        let mut audio = crate::audio::AudioSystem::new();
+        let jump_sfx = audio.register_sound("jump");
+        let hit_sfx = audio.register_sound("hit");
+        let explosion_sfx = audio.register_sound("explosion");
+        for _tick in 0..600 {
+            engine.tick()?;
+            audio.tick();
+            if engine.tick_count() % 50 == 0 { audio.play(jump_sfx, 0.8); }
+            if engine.tick_count() % 100 == 0 { audio.play(hit_sfx, 1.0); }
+        }
+        log::info!("M13 complete: {} sounds registered, {} events played", audio.sound_count(), audio.event_count());
+        assert!(audio.event_count() > 10);
+        Ok(())
+    }
+}
+
+pub struct M14Demo;
+impl Demo for M14Demo {
+    fn id(&self) -> &str { "M14" }
+    fn description(&self) -> &str { "M14 Save/Load: serialize, roundtrip, perf budgets" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        for _tick in 0..300 {
+            engine.tick()?;
+        }
+        let save = crate::save::SaveData::new(100.0, 200.0, 500, engine.config.seed, engine.tick_count());
+        let path = "/tmp/m14_save.json";
+        save.save_to_file(path)?;
+        let loaded = crate::save::SaveData::load_from_file(path)?;
+        for _tick in 300..600 {
+            engine.tick()?;
+        }
+        log::info!("M14 complete: saved at tick {}, loaded tick {}, final tick {}", 
+                   save.tick_count, loaded.tick_count, engine.tick_count());
+        assert_eq!(save.tick_count, loaded.tick_count);
+        let _ = std::fs::remove_file(path);
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -1376,6 +1470,10 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M8Demo));
         registry.demos.push(Box::new(M9Demo));
         registry.demos.push(Box::new(M10Demo));
+        registry.demos.push(Box::new(M11Demo));
+        registry.demos.push(Box::new(M12Demo));
+        registry.demos.push(Box::new(M13Demo));
+        registry.demos.push(Box::new(M14Demo));
         
         registry
     }

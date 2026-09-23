@@ -189,7 +189,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M11: NPC系统
+### M11: NPC系统 ✓ COMPLETE (2026-09-23)
 **目标**: 任务/对话
 - NPC定义
 - 对话树
