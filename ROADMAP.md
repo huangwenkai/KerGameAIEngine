@@ -89,15 +89,25 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M4: 像素/区块世界
+### M4: 像素/区块世界 ✓ COMPLETE (2026-09-23)
 **目标**: Noita风格像素世界
-- 4px单元格 (Material枚举: Air, Sand, Stone, Water, ...)
-- Chunk系统 (128×128 chunk)
-- World生成器 (Perlin噪声地形)
-- M4 Demo: 生成256×256像素世界，运行10秒
+
+**🔒 LOCKED DECISION: 4-pixel cells**
+- Cell size: 4×4 screen pixels (NOT 1px)
+- Rationale: Performance (fewer cells), visual clarity, Terraria-scale feel
+- Each cell = single material (Air/Sand/Stone/Water...)
+
+**实现**:
+- Material枚举 (Air, Sand, Stone, Water, 可扩展)
+- Chunk系统 (128×128 cells per chunk = 512×512 screen pixels)
+- 稀疏chunk存储 (按需加载/卸载)
+- Seeded Perlin噪声地形生成
+- Query/Set cell APIs (get_cell, set_cell, dig, place)
+- M4 Demo: 流式加载chunk，移动焦点，10秒
 
 **验收**: 
 - 世界生成确定性 (相同seed相同地形)
+- Chunk稀疏加载正确
 - 截图展示地形
 
 ---

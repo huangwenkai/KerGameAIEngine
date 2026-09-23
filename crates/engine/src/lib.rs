@@ -15,6 +15,8 @@ pub mod rng;
 pub mod state;
 pub mod ecs;
 pub mod render;
+pub mod chunk;
+pub mod terrain;
 
 #[cfg(test)]
 mod replay_tests;
@@ -49,6 +51,7 @@ pub struct Engine {
     pub rng: rng::GameRng,
     pub world: state::World,
     pub ecs: ecs::EcsWorld,
+    pub chunk_world: chunk::ChunkWorld,
 }
 
 impl Engine {
@@ -65,6 +68,7 @@ impl Engine {
             rng: rng::GameRng::new(seed),
             world: state::World::new(),
             ecs: ecs::EcsWorld::new(),
+            chunk_world: chunk::ChunkWorld::new(),
         }
     }
 

@@ -437,6 +437,100 @@ impl Demo for M3Demo {
     }
 }
 
+/// M4 demo: Chunk streaming + terrain generation
+pub struct M4Demo;
+
+impl Demo for M4Demo {
+    fn id(&self) -> &str {
+        "M4"
+    }
+
+    fn description(&self) -> &str {
+        "M4 pixel/chunk world: 4px cells + terrain generation + chunk streaming"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M4 demo: {}", self.description());
+        log::info!("🔒 Cell size: 4px (locked decision)");
+        log::info!("Chunk size: 128×128 cells = 512×512 screen pixels");
+        
+        let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
+        
+        log::info!("Phase 1: Generating initial terrain (5×5 chunks around origin)");
+        let start = std::time::Instant::now();
+        
+        for cy in -2..=2 {
+            for cx in -2..=2 {
+                let coord = crate::chunk::ChunkCoord::new(cx, cy);
+                terrain_gen.generate_chunk(&mut engine.chunk_world, coord);
+            }
+        }
+        
+        log::info!("Generated {} chunks in {}ms", 
+                   engine.chunk_world.chunk_count(),
+                   start.elapsed().as_millis());
+        
+        log::info!("Phase 2: Simulating 600 ticks with chunk streaming");
+        let mut focus_x = 0;
+        let mut focus_y = 0;
+        let start_sim = std::time::Instant::now();
+        
+        for tick in 0..600 {
+            engine.tick()?;
+            
+            if tick % 10 == 0 {
+                focus_x += 20;
+                if tick % 100 == 0 {
+                    focus_y += 10;
+                }
+                
+                let chunk_radius = 2;
+                for cy in (focus_y / (crate::chunk::CHUNK_SIZE as i32)) - chunk_radius
+                    ..=(focus_y / (crate::chunk::CHUNK_SIZE as i32)) + chunk_radius
+                {
+                    for cx in (focus_x / (crate::chunk::CHUNK_SIZE as i32)) - chunk_radius
+                        ..=(focus_x / (crate::chunk::CHUNK_SIZE as i32)) + chunk_radius
+                    {
+                        let coord = crate::chunk::ChunkCoord::new(cx, cy);
+                        terrain_gen.generate_chunk(&mut engine.chunk_world, coord);
+                    }
+                }
+            }
+            
+            if (tick + 1) % 100 == 0 {
+                log::info!("Tick {}/600 - Focus: ({}, {}), Chunks: {}",
+                           tick + 1, focus_x, focus_y, engine.chunk_world.chunk_count());
+            }
+        }
+        
+        let elapsed = start_sim.elapsed();
+        
+        log::info!("Phase 3: Sampling terrain for verification");
+        let mut sample_hash = 0u64;
+        for (x, y) in [(0, 0), (100, 50), (200, 100), (500, 200), (1000, 300)].iter() {
+            let material = engine.chunk_world.get_cell(*x, *y);
+            sample_hash = sample_hash.wrapping_mul(31).wrapping_add(material as u64);
+        }
+        
+        log::info!("M4 demo completed: {} ticks", engine.tick_count());
+        log::info!("Final focus: ({}, {})", focus_x, focus_y);
+        log::info!("Total chunks loaded: {}", engine.chunk_world.chunk_count());
+        log::info!("Terrain sample hash: {:x}", sample_hash);
+        log::info!("Elapsed: {}ms", elapsed.as_millis());
+        
+        let test_x = 100;
+        let test_y = 100;
+        let original = engine.chunk_world.get_cell(test_x, test_y);
+        engine.chunk_world.dig(test_x, test_y);
+        assert_eq!(engine.chunk_world.get_cell(test_x, test_y), crate::chunk::Material::Air);
+        engine.chunk_world.place(test_x, test_y, original);
+        assert_eq!(engine.chunk_world.get_cell(test_x, test_y), original);
+        log::info!("Dig/place verified at ({}, {})", test_x, test_y);
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -453,6 +547,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M1Demo));
         registry.demos.push(Box::new(M2Demo));
         registry.demos.push(Box::new(M3Demo));
+        registry.demos.push(Box::new(M4Demo));
         
         registry
     }
