@@ -288,8 +288,8 @@ pub struct SpriteVertex {
 
 /// Sprite batch renderer
 pub struct SpriteBatch {
-    vertices: Vec<SpriteVertex>,
-    indices: Vec<u16>,
+    pub vertices: Vec<SpriteVertex>,
+    pub indices: Vec<u16>,
 }
 
 impl SpriteBatch {

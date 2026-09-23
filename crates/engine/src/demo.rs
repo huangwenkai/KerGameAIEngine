@@ -1984,14 +1984,295 @@ impl DemoRegistry {
     }
 }
 
-/// Run a demo and generate report
-pub fn run_demo(demo_id: &str, seed: u64, headless: bool) -> Result<DemoReport> {
+/// Render current SHOWCASE frame based on tick count
+fn render_showcase_frame(engine: &mut Engine, batch: &mut crate::render::SpriteBatch) {
+    // Calculate chapter from cumulative tick boundaries (M0-M15 have varying lengths)
+    let tick = engine.tick_count();
+    let chapter = if tick < 60 { 0 }
+        else if tick < 120 { 1 }
+        else if tick < 180 { 2 }
+        else if tick < 240 { 3 }
+        else if tick < 300 { 4 }
+        else if tick < 420 { 5 }
+        else if tick < 600 { 6 }
+        else if tick < 780 { 7 }
+        else if tick < 900 { 8 }
+        else if tick < 1080 { 9 }
+        else if tick < 1260 { 10 }
+        else if tick < 1320 { 11 }
+        else if tick < 1380 { 12 }
+        else if tick < 1440 { 13 }
+        else if tick < 1500 { 14 }
+        else if tick < 1620 { 15 }
+        else { 16 };
+    
+    let tick_in_chapter = match chapter {
+        0 => tick,
+        1 => tick - 60,
+        2 => tick - 120,
+        3 => tick - 180,
+        4 => tick - 240,
+        5 => tick - 300,
+        6 => tick - 420,
+        7 => tick - 600,
+        8 => tick - 780,
+        9 => tick - 900,
+        10 => tick - 1080,
+        11 => tick - 1260,
+        12 => tick - 1320,
+        13 => tick - 1380,
+        14 => tick - 1440,
+        15 => tick - 1500,
+        _ => 0,
+    } as usize;
+    
+    // Background gradient
+    for i in 0..15 {
+        let y = i as f32 * 40.0;
+        let brightness = 0.05 + (i as f32 * 0.01);
+        batch.add_quad(0.0, y, 800.0, 40.0, [0.0, 0.0, brightness, 1.0]);
+    }
+    
+    // Chapter title banner
+    let title_color = [0.2, 0.8, 0.9, 1.0];
+    batch.add_quad(50.0, 50.0, 700.0, 80.0, [0.1, 0.1, 0.2, 0.9]);
+    batch.add_quad(55.0, 55.0, 690.0, 70.0, title_color);
+    
+    // Chapter-specific content
+    match chapter {
+        0 => {
+            // M0: Engine scaffold
+            let pulse = (tick_in_chapter as f32 * 0.1).sin() * 0.5 + 0.5;
+            batch.add_quad(350.0, 250.0, 100.0, 100.0, [pulse, pulse, pulse, 1.0]);
+        }
+        1 => {
+            // M1: Command layer
+            for i in 0..engine.world.entity_count().min(50) {
+                let x = ((i * 17) % 700) as f32 + 50.0;
+                let y = ((i * 23) % 400) as f32 + 150.0;
+                batch.add_quad(x, y, 8.0, 8.0, [1.0, 0.8, 0.2, 1.0]);
+            }
+        }
+        2 => {
+            // M2: ECS entities
+            for i in 0..engine.ecs.entity_count().min(100) {
+                let x = ((i * 13 + tick_in_chapter * 3) % 700) as f32 + 50.0;
+                let y = ((i * 19) % 400) as f32 + 150.0;
+                let color_r = ((i * 7) % 256) as f32 / 255.0;
+                let color_g = ((i * 11) % 256) as f32 / 255.0;
+                let color_b = ((i * 13) % 256) as f32 / 255.0;
+                batch.add_quad(x, y, 6.0, 6.0, [color_r, color_g, color_b, 1.0]);
+            }
+        }
+        3 => {
+            // M3: Render pipeline
+            for i in 0..20 {
+                let x = i as f32 * 40.0;
+                let y = 200.0 + ((tick_in_chapter + i * 10) as f32 * 0.1).sin() * 80.0;
+                let hue = i as f32 / 20.0;
+                batch.add_quad(x, y, 30.0, 30.0, [hue, 1.0 - hue, 0.5, 1.0]);
+            }
+        }
+        4 => {
+            // M4: Chunk world - terrain
+            for y in 0..15 {
+                for x in 0..20 {
+                    let cell_x = x * 4;
+                    let cell_y = y * 4 + 40;
+                    let material = engine.chunk_world.get_cell(cell_x, cell_y);
+                    let color = match material {
+                        crate::chunk::Material::Air => [0.0, 0.0, 0.0, 0.0],
+                        crate::chunk::Material::Stone => [0.5, 0.5, 0.5, 1.0],
+                        crate::chunk::Material::Sand => [0.9, 0.8, 0.5, 1.0],
+                        crate::chunk::Material::Water => [0.2, 0.4, 0.9, 1.0],
+                        crate::chunk::Material::Dirt => [0.4, 0.3, 0.2, 1.0],
+                        crate::chunk::Material::Grass => [0.2, 0.6, 0.2, 1.0],
+                    };
+                    if color[3] > 0.0 {
+                        let screen_x = x as f32 * 40.0;
+                        let screen_y = y as f32 * 40.0 + 150.0;
+                        batch.add_quad(screen_x, screen_y, 40.0, 40.0, color);
+                    }
+                }
+            }
+        }
+        5 => {
+            // M5: Character motor
+            for x in 0..20 {
+                for y in 0..15 {
+                    let cell_x = x * 4 + 60;
+                    let cell_y = y * 4 + 40;
+                    let material = engine.chunk_world.get_cell(cell_x, cell_y);
+                    let color = match material {
+                        crate::chunk::Material::Air => [0.0, 0.0, 0.0, 0.0],
+                        crate::chunk::Material::Stone => [0.4, 0.4, 0.4, 1.0],
+                        _ => [0.6, 0.6, 0.6, 1.0],
+                    };
+                    if color[3] > 0.0 {
+                        let screen_x = x as f32 * 40.0;
+                        let screen_y = y as f32 * 40.0 + 150.0;
+                        batch.add_quad(screen_x, screen_y, 40.0, 40.0, color);
+                    }
+                }
+            }
+            // Character AABB
+            batch.add_quad(400.0, 300.0, 12.0, 24.0, [0.0, 1.0, 0.0, 1.0]);
+        }
+        6 => {
+            // M6: Falling sand/water
+            for y in 0..15 {
+                for x in 0..20 {
+                    let cell_x = x * 4 + 70;
+                    let cell_y = y * 4;
+                    let material = engine.chunk_world.get_cell(cell_x, cell_y);
+                    let color = match material {
+                        crate::chunk::Material::Air => [0.0, 0.0, 0.0, 0.0],
+                        crate::chunk::Material::Stone => [0.3, 0.3, 0.3, 1.0],
+                        crate::chunk::Material::Sand => [1.0, 0.9, 0.4, 1.0],
+                        crate::chunk::Material::Water => [0.3, 0.6, 1.0, 0.8],
+                        crate::chunk::Material::Dirt => [0.5, 0.4, 0.3, 1.0],
+                        crate::chunk::Material::Grass => [0.3, 0.7, 0.3, 1.0],
+                    };
+                    if color[3] > 0.0 {
+                        let screen_x = x as f32 * 40.0;
+                        let screen_y = y as f32 * 40.0 + 150.0;
+                        batch.add_quad(screen_x, screen_y, 40.0, 40.0, color);
+                    }
+                }
+            }
+        }
+        7 => {
+            // M7: Lighting
+            for i in 0..5 {
+                let light_x = 100.0 + i as f32 * 100.0;
+                let light_y = 300.0;
+                let pulse = (tick_in_chapter as f32 * 0.15 + i as f32).sin() * 0.3 + 0.7;
+                batch.add_quad(light_x - 10.0, light_y - 10.0, 20.0, 20.0, [1.0, 0.9, 0.3, pulse]);
+                for r in 1..4 {
+                    let radius = r as f32 * 30.0;
+                    let alpha = (1.0 - r as f32 / 4.0) * pulse * 0.3;
+                    batch.add_quad(light_x - radius, light_y - radius, radius * 2.0, radius * 2.0, [1.0, 0.8, 0.2, alpha]);
+                }
+            }
+        }
+        8 => {
+            // M8: Items
+            for i in 0..10 {
+                let x = 50.0 + (i % 5) as f32 * 150.0;
+                let y = 200.0 + (i / 5) as f32 * 100.0;
+                let bob = ((tick_in_chapter + i * 10) as f32 * 0.1).sin() * 5.0;
+                batch.add_quad(x, y + bob, 60.0, 60.0, [0.2, 0.2, 0.3, 0.8]);
+                let item_color = match i % 4 {
+                    0 => [0.8, 0.8, 0.9, 1.0],
+                    1 => [0.7, 0.5, 0.3, 1.0],
+                    2 => [1.0, 0.3, 0.3, 1.0],
+                    _ => [0.6, 0.4, 0.2, 1.0],
+                };
+                batch.add_quad(x + 10.0, y + bob + 10.0, 40.0, 40.0, item_color);
+            }
+        }
+        9 => {
+            // M9: Combat
+            batch.add_quad(100.0, 300.0, 30.0, 30.0, [0.0, 1.0, 0.0, 1.0]);
+            for i in 0..10 {
+                let x = 200.0 + (i % 5) as f32 * 80.0;
+                let y = 250.0 + (i / 5) as f32 * 100.0;
+                let fade = if tick_in_chapter > i * 18 { 0.3 } else { 1.0 };
+                batch.add_quad(x, y, 25.0, 25.0, [1.0, 0.0, 0.0, fade]);
+                if tick_in_chapter == i * 18 {
+                    batch.add_quad(x, y - 20.0, 15.0, 15.0, [1.0, 1.0, 0.0, 1.0]);
+                }
+            }
+        }
+        10 => {
+            // M10: Magic
+            let center_x = 400.0;
+            let center_y = 300.0;
+            for i in 0..8 {
+                let angle = (i as f32 / 8.0) * std::f32::consts::PI * 2.0 + tick_in_chapter as f32 * 0.05;
+                let radius = 100.0;
+                let x = center_x + angle.cos() * radius;
+                let y = center_y + angle.sin() * radius;
+                batch.add_quad(x - 5.0, y - 5.0, 10.0, 10.0, [0.5, 0.0, 1.0, 0.8]);
+            }
+            let proj_x = center_x + (tick_in_chapter as f32 * 5.0) % 300.0;
+            batch.add_quad(proj_x, center_y, 20.0, 20.0, [1.0, 0.5, 0.0, 1.0]);
+        }
+        11 => {
+            // M11: NPC
+            batch.add_quad(150.0, 300.0, 40.0, 50.0, [0.8, 0.6, 0.2, 1.0]);
+            batch.add_quad(140.0, 280.0, 60.0, 15.0, [0.4, 0.3, 0.1, 1.0]);
+            batch.add_quad(250.0, 300.0, 40.0, 50.0, [0.3, 0.3, 0.7, 1.0]);
+            batch.add_quad(260.0, 290.0, 20.0, 40.0, [0.5, 0.5, 0.5, 1.0]);
+            batch.add_quad(180.0, 250.0, 80.0, 30.0, [1.0, 1.0, 1.0, 0.8]);
+            batch.add_quad(280.0, 250.0, 80.0, 30.0, [1.0, 1.0, 1.0, 0.8]);
+        }
+        12 => {
+            // M12: Story/Quests
+            batch.add_quad(200.0, 150.0, 400.0, 300.0, [0.9, 0.85, 0.7, 0.95]);
+            for i in 0..3 {
+                let y = 180.0 + i as f32 * 80.0;
+                batch.add_quad(220.0, y, 360.0, 60.0, [0.8, 0.75, 0.6, 1.0]);
+                let progress = (tick_in_chapter as f32 / 60.0 + i as f32 * 0.3) % 1.0;
+                batch.add_quad(540.0, y + 20.0, 20.0, 20.0, [0.0, 1.0, 0.0, progress]);
+            }
+        }
+        13 => {
+            // M13: Audio
+            let center_y = 300.0;
+            for i in 0..40 {
+                let x = 20.0 + i as f32 * 20.0;
+                let freq = (tick_in_chapter as f32 * 0.2 + i as f32 * 0.5).sin();
+                let height = 50.0 + freq * 40.0;
+                let y = center_y - height / 2.0;
+                let color_pulse = (freq + 1.0) / 2.0;
+                batch.add_quad(x, y, 10.0, height, [color_pulse, 0.5, 1.0 - color_pulse, 0.8]);
+            }
+            batch.add_quad(350.0, 250.0, 100.0, 100.0, [0.2, 0.2, 0.2, 1.0]);
+            batch.add_quad(380.0, 280.0, 40.0, 40.0, [1.0, 0.8, 0.0, 1.0]);
+        }
+        14 => {
+            // M14: Save/Load
+            batch.add_quad(300.0, 200.0, 200.0, 250.0, [0.3, 0.3, 0.8, 1.0]);
+            batch.add_quad(320.0, 220.0, 160.0, 80.0, [0.2, 0.2, 0.6, 1.0]);
+            batch.add_quad(360.0, 320.0, 80.0, 100.0, [0.9, 0.9, 0.9, 1.0]);
+            let save_progress = (tick_in_chapter as f32 / 60.0).min(1.0);
+            batch.add_quad(320.0, 460.0, 160.0 * save_progress, 15.0, [0.0, 1.0, 0.0, 1.0]);
+        }
+        15 => {
+            // M15: Animation - skeletal
+            let base_x = 400.0;
+            let base_y = 350.0;
+            let anim_time = tick_in_chapter as f32 * 0.1;
+            batch.add_quad(base_x - 5.0, base_y - 60.0, 10.0, 60.0, [0.8, 0.8, 0.8, 1.0]);
+            batch.add_quad(base_x - 20.0, base_y - 100.0, 40.0, 40.0, [1.0, 0.8, 0.6, 1.0]);
+            let arm_swing = anim_time.sin() * 30.0;
+            batch.add_quad(base_x - 40.0, base_y - 50.0 + arm_swing, 35.0, 8.0, [0.8, 0.6, 0.4, 1.0]);
+            batch.add_quad(base_x + 5.0, base_y - 50.0 - arm_swing, 35.0, 8.0, [0.8, 0.6, 0.4, 1.0]);
+            let leg_swing = (anim_time * 1.5).sin() * 20.0;
+            batch.add_quad(base_x - 15.0, base_y, 10.0, 40.0 + leg_swing, [0.6, 0.4, 0.2, 1.0]);
+            batch.add_quad(base_x + 5.0, base_y, 10.0, 40.0 - leg_swing, [0.6, 0.4, 0.2, 1.0]);
+        }
+        _ => {
+            // Completion
+            batch.add_quad(250.0, 250.0, 300.0, 100.0, [0.2, 0.8, 0.3, 1.0]);
+        }
+    }
+    
+    // Progress bar
+    let progress = tick as f32 / 1860.0;
+    batch.add_quad(50.0, 550.0, 700.0, 20.0, [0.2, 0.2, 0.2, 1.0]);
+    batch.add_quad(50.0, 550.0, 700.0 * progress, 20.0, [0.3, 0.7, 1.0, 1.0]);
+}
+
+/// Run a demo in headless mode (fast, no window)
+pub fn run_demo_headless(demo_id: &str, seed: u64) -> Result<DemoReport> {
     let registry = DemoRegistry::new();
     let demo = registry.get(demo_id)
         .ok_or_else(|| anyhow::anyhow!("Demo '{}' not found", demo_id))?;
 
     let config = EngineConfig {
-        headless,
+        headless: true,
         seed,
         ..Default::default()
     };
@@ -2011,4 +2292,270 @@ pub fn run_demo(demo_id: &str, seed: u64, headless: bool) -> Result<DemoReport> 
     );
 
     Ok(report)
+}
+
+/// Run a demo with windowed rendering (incremental pacing)
+pub fn run_demo_windowed(demo_id: &str, seed: u64) -> Result<DemoReport> {
+    use winit::event::{Event, WindowEvent};
+    use winit::event_loop::{ControlFlow, EventLoop};
+    
+    let registry = DemoRegistry::new();
+    let demo = registry.get(demo_id)
+        .ok_or_else(|| anyhow::anyhow!("Demo '{}' not found", demo_id))?;
+
+    log::info!("Starting windowed demo: {}", demo_id);
+    log::info!("Press ESC to exit early");
+    
+    let event_loop = EventLoop::new()?;
+    let render_ctx = pollster::block_on(
+        crate::render::WindowedRenderContext::new(&event_loop, 800, 600)
+    )?;
+    
+    // Load shader
+    let shader_source = include_str!("../shaders/sprite.wgsl");
+    let shader = render_ctx.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Sprite Shader"),
+        source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+    });
+    
+    // Create render pipeline
+    let pipeline_layout = render_ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Sprite Pipeline Layout"),
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    });
+    
+    let pipeline = render_ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Sprite Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<crate::render::SpriteVertex>() as u64,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4],
+            }],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(wgpu::ColorTargetState {
+                format: render_ctx.surface_config.format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+        cache: None,
+    });
+    
+    let config = EngineConfig {
+        headless: false,
+        seed,
+        ..Default::default()
+    };
+
+    let mut engine = Engine::new(config);
+    let start_time = Instant::now();
+    let mut last_render = Instant::now();
+    let mut demo_completed = false;
+    let mut showcase_initialized = false;
+    
+    log::info!("Initializing demo state...");
+    
+    // Use Arc<Mutex> to share result across event loop boundary
+    let result = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let result_clone = result.clone();
+    
+    let _ = event_loop.run(move |event, elwt| {
+        elwt.set_control_flow(ControlFlow::Poll);
+        
+        match event {
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::CloseRequested => {
+                    log::info!("Window close requested");
+                    *result_clone.lock().unwrap() = Some(Err(anyhow::anyhow!("Window closed by user")));
+                    elwt.exit();
+                }
+                WindowEvent::KeyboardInput { event, .. } => {
+                    if event.physical_key == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Escape) {
+                        log::info!("ESC pressed, exiting");
+                        *result_clone.lock().unwrap() = Some(Err(anyhow::anyhow!("Cancelled by user")));
+                        elwt.exit();
+                    }
+                }
+                WindowEvent::RedrawRequested => {
+                    // Render current frame
+                    match render_ctx.surface.get_current_texture() {
+                        Ok(frame) => {
+                            let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+                            let mut encoder = render_ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("Render Encoder"),
+                            });
+                            
+                            {
+                                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: Some("Render Pass"),
+                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                        view: &view,
+                                        resolve_target: None,
+                                        ops: wgpu::Operations {
+                                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                                r: 0.05,
+                                                g: 0.05,
+                                                b: 0.15,
+                                                a: 1.0,
+                                            }),
+                                            store: wgpu::StoreOp::Store,
+                                        },
+                                    })],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                });
+                                
+                                render_pass.set_pipeline(&pipeline);
+                                
+                                // Render SHOWCASE content
+                                let mut batch = crate::render::SpriteBatch::new();
+                                render_showcase_frame(&mut engine, &mut batch);
+                                
+                                // Upload vertices and indices
+                                if !batch.vertices.is_empty() {
+                                    use wgpu::util::DeviceExt;
+                                    let vertex_buffer = render_ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                        label: Some("Vertex Buffer"),
+                                        contents: bytemuck::cast_slice(&batch.vertices),
+                                        usage: wgpu::BufferUsages::VERTEX,
+                                    });
+                                    let index_buffer = render_ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                        label: Some("Index Buffer"),
+                                        contents: bytemuck::cast_slice(&batch.indices),
+                                        usage: wgpu::BufferUsages::INDEX,
+                                    });
+                                    
+                                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                                    render_pass.draw_indexed(0..batch.indices.len() as u32, 0, 0..1);
+                                }
+                            }
+                            
+                            render_ctx.queue.submit(std::iter::once(encoder.finish()));
+                            frame.present();
+                        }
+                        Err(e) => {
+                            log::error!("Surface error: {}", e);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            Event::AboutToWait => {
+                // Initialize SHOWCASE-specific state once
+                if !showcase_initialized && demo.id() == "SHOWCASE" {
+                    let terrain_gen = crate::terrain::TerrainGenerator::new(seed);
+                    for cy in -1..=1 {
+                        for cx in -1..=1 {
+                            terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
+                        }
+                    }
+                    for _ in 0..500 {
+                        let x = engine.rng.gen_range(0.0..1000.0);
+                        let y = engine.rng.gen_range(0.0..1000.0);
+                        engine.ecs.spawn_entity(x, y, engine.rng.gen_range(-50.0..50.0), engine.rng.gen_range(-50.0..50.0), 100.0);
+                    }
+                    engine.light_map.set_ambient(32);
+                    for i in 0..3 {
+                        engine.light_map.add_light(crate::lighting::PointLight::new(70 + i * 15, 40, 200));
+                    }
+                    showcase_initialized = true;
+                    log::info!("SHOWCASE initialized");
+                }
+                
+                // Advance simulation incrementally (1 tick per frame)
+                if !demo_completed {
+                    let target_ticks = match demo.id() {
+                        "SHOWCASE" => 1860, // Full M0-M15
+                        _ => 600,
+                    };
+                    
+                    if engine.tick_count() < target_ticks {
+                        // Run 1 tick per frame for smooth real-time pacing
+                        if let Err(e) = engine.tick() {
+                            log::error!("Tick error: {}", e);
+                            demo_completed = true;
+                            *result_clone.lock().unwrap() = Some(Err(e));
+                            elwt.exit();
+                        }
+                        
+                        // SHOWCASE chapter-specific actions
+                        if demo.id() == "SHOWCASE" {
+                            let tick = engine.tick_count();
+                            // Chapter 6 physics: drop sand/water incrementally (ticks 900-1080)
+                            if tick >= 900 && tick < 1080 && tick % 6 == 0 {
+                                let sand_x = 60 + ((tick - 900) % 6) as i32;
+                                engine.queue_command(crate::commands::Command::PlaceCell { 
+                                    x: sand_x, y: -10, material: crate::chunk::Material::Sand 
+                                });
+                                engine.physics_sim.wake_cell(sand_x, -10);
+                                if tick % 12 == 0 {
+                                    let water_x = 70 + ((tick - 900) % 5) as i32;
+                                    engine.queue_command(crate::commands::Command::PlaceCell { 
+                                        x: water_x, y: -10, material: crate::chunk::Material::Water 
+                                    });
+                                    engine.physics_sim.wake_cell(water_x, -10);
+                                }
+                            }
+                        }
+                    } else {
+                        // Simulation complete
+                        demo_completed = true;
+                        let report = DemoReport::success(
+                            demo.id().to_string(),
+                            seed,
+                            engine.tick_count(),
+                            start_time.elapsed(),
+                            engine.time.sim_time,
+                            engine.replay_hash(),
+                        );
+                        *result_clone.lock().unwrap() = Some(Ok(report));
+                        // Keep window open to show final frame
+                        std::thread::sleep(std::time::Duration::from_millis(1000));
+                        elwt.exit();
+                    }
+                }
+                
+                // Request redraw at ~60 FPS
+                if last_render.elapsed() >= std::time::Duration::from_millis(16) {
+                    render_ctx.window.request_redraw();
+                    last_render = Instant::now();
+                }
+            }
+            _ => {}
+        }
+    });
+    
+    // Extract result
+    let final_result = result.lock().unwrap().take();
+    final_result.unwrap_or_else(|| Err(anyhow::anyhow!("Demo did not complete")))
+}
+
+/// Run a demo and generate report (routes to headless or windowed)
+pub fn run_demo(demo_id: &str, seed: u64, headless: bool) -> Result<DemoReport> {
+    if headless {
+        run_demo_headless(demo_id, seed)
+    } else {
+        run_demo_windowed(demo_id, seed)
+    }
 }
