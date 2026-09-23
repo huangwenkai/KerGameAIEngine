@@ -2338,9 +2338,10 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         place_pressed: false,
     }));
     
-    // Application handler
+    // Application handler with rendering
     struct TerrariaApp {
-        window: Option<Rc<Window>>,
+        window: Option<std::sync::Arc<Window>>,
+        renderer: Option<crate::render::WindowedRenderContext>,
         game_state: Rc<RefCell<GameState>>,
         engine: *mut Engine,
     }
@@ -2354,8 +2355,16 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                 .with_title("Terraria Demo - KerGameAIEngine")
                 .with_inner_size(winit::dpi::PhysicalSize::new(1024, 768));
             
-            self.window = Some(Rc::new(event_loop.create_window(window_attributes).unwrap()));
-            log::info!("Window created - game loop starting");
+            let window = std::sync::Arc::new(event_loop.create_window(window_attributes).unwrap());
+            
+            // Create wgpu renderer
+            let renderer = pollster::block_on(
+                crate::render::RenderContext::new_windowed(window.clone())
+            ).expect("Failed to create renderer");
+            
+            self.window = Some(window);
+            self.renderer = Some(renderer);
+            log::info!("Window created with wgpu surface rendering");
         }
         
         fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: winit::window::WindowId, event: WindowEvent) {
@@ -2370,6 +2379,12 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                 WindowEvent::CloseRequested => {
                     log::info!("Window close requested");
                     state.running = false;
+                }
+                
+                WindowEvent::Resized(physical_size) => {
+                    if let Some(renderer) = &mut self.renderer {
+                        renderer.resize(physical_size);
+                    }
                 }
                 
                 WindowEvent::KeyboardInput { event: key_event, .. } => {
@@ -2419,18 +2434,141 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                 WindowEvent::RedrawRequested => {
                     state.frame_count += 1;
                     
-                    if state.frame_count % 60 == 0 {
-                        let elapsed = state.start_time.elapsed().as_secs_f32();
-                        let player_entity = state.combat.get_entity(state.player_id).unwrap();
-                        
-                        log::info!("=== Frame {} ({:.1}s) ===", state.frame_count, elapsed);
-                        log::info!("Player: pos=({:.0},{:.0}), HP={}/{}, on_ground={}",
-                                   state.player_motor.aabb.x, state.player_motor.aabb.y,
-                                   player_entity.stats.current_health,
-                                   player_entity.stats.max_health,
-                                   state.player_motor.on_ground);
-                        log::info!("Inventory: {}/20 slots, selected=slot {}", 
-                                   state.inventory.item_count(), state.selected_hotbar_slot + 1);
+                    // Render to window surface
+                    if let Some(renderer) = &self.renderer {
+                        if let Ok((mut encoder, view, frame)) = renderer.begin_frame() {
+                            let engine = unsafe { &mut *self.engine };
+                            
+                            // Clear to sky blue
+                            renderer.clear(&mut encoder, &view, wgpu::Color {
+                                r: 0.5,
+                                g: 0.7,
+                                b: 1.0,
+                                a: 1.0,
+                            });
+                            
+                            // Collect quads
+                            let mut quads = Vec::new();
+                            let screen_width = renderer.config.width as f32;
+                            let screen_height = renderer.config.height as f32;
+                            let cell_size = 8.0;
+                            
+                            let view_x = state.camera_x - screen_width / (2.0 * cell_size);
+                            let view_y = state.camera_y - screen_height / (2.0 * cell_size);
+                            let view_w = screen_width / cell_size;
+                            let view_h = screen_height / cell_size;
+                            
+                            // Terrain cells
+                            for cy in (view_y as i32 - 1)..(view_y + view_h) as i32 + 1 {
+                                for cx in (view_x as i32 - 1)..(view_x + view_w) as i32 + 1 {
+                                    let material = engine.chunk_world.get_cell(cx, cy);
+                                    let color = match material {
+                                        crate::chunk::Material::Dirt => [0.6, 0.4, 0.2, 1.0],
+                                        crate::chunk::Material::Stone => [0.5, 0.5, 0.5, 1.0],
+                                        crate::chunk::Material::Sand => [0.9, 0.9, 0.6, 1.0],
+                                        crate::chunk::Material::Water => [0.2, 0.5, 0.9, 0.7],
+                                        crate::chunk::Material::Grass => [0.2, 0.8, 0.2, 1.0],
+                                        crate::chunk::Material::Air => continue,
+                                    };
+                                    
+                                    let screen_x = (cx as f32 - view_x) * cell_size;
+                                    let screen_y = (cy as f32 - view_y) * cell_size;
+                                    
+                                    quads.push(crate::render::QuadInstance {
+                                        x: screen_x,
+                                        y: screen_y,
+                                        width: cell_size,
+                                        height: cell_size,
+                                        color,
+                                    });
+                                }
+                            }
+                            
+                            // Player
+                            let player_screen_x = (state.player_motor.aabb.x / 4.0 - view_x) * cell_size;
+                            let player_screen_y = (state.player_motor.aabb.y / 4.0 - view_y) * cell_size;
+                            let player_w = state.player_motor.aabb.width / 4.0 * cell_size;
+                            let player_h = state.player_motor.aabb.height / 4.0 * cell_size;
+                            
+                            quads.push(crate::render::QuadInstance {
+                                x: player_screen_x,
+                                y: player_screen_y,
+                                width: player_w,
+                                height: player_h,
+                                color: [0.0, 1.0, 0.0, 1.0], // Green
+                            });
+                            
+                            // Enemies
+                            for &enemy_id in &state.enemy_ids {
+                                if let Some(enemy) = state.combat.get_entity(enemy_id) {
+                                    if enemy.is_alive() {
+                                        let ex = (enemy.x / 4.0 - view_x) * cell_size;
+                                        let ey = (enemy.y / 4.0 - view_y) * cell_size;
+                                        quads.push(crate::render::QuadInstance {
+                                            x: ex,
+                                            y: ey,
+                                            width: 12.0,
+                                            height: 12.0,
+                                            color: [1.0, 0.0, 0.0, 1.0], // Red
+                                        });
+                                    }
+                                }
+                            }
+                            
+                            // World items
+                            for item in state.world_items.items.iter() {
+                                let ix = (item.x / 4.0 - view_x) * cell_size;
+                                let iy = (item.y / 4.0 - view_y) * cell_size;
+                                quads.push(crate::render::QuadInstance {
+                                    x: ix,
+                                    y: iy,
+                                    width: 4.0,
+                                    height: 4.0,
+                                    color: [1.0, 1.0, 0.0, 1.0], // Yellow
+                                });
+                            }
+                            
+                            // HUD: HP bar
+                            if let Some(player) = state.combat.get_entity(state.player_id) {
+                                let hp_ratio = player.stats.current_health as f32 / player.stats.max_health as f32;
+                                quads.push(crate::render::QuadInstance {
+                                    x: 10.0,
+                                    y: 10.0,
+                                    width: 200.0,
+                                    height: 20.0,
+                                    color: [0.3, 0.3, 0.3, 0.8],
+                                });
+                                quads.push(crate::render::QuadInstance {
+                                    x: 10.0,
+                                    y: 10.0,
+                                    width: 200.0 * hp_ratio,
+                                    height: 20.0,
+                                    color: [0.0, 0.8, 0.0, 0.9],
+                                });
+                            }
+                            
+                            // Hotbar slots
+                            for i in 0..9 {
+                                let x = 10.0 + i as f32 * 35.0;
+                                let y = screen_height - 50.0;
+                                quads.push(crate::render::QuadInstance {
+                                    x,
+                                    y,
+                                    width: 30.0,
+                                    height: 30.0,
+                                    color: if i == state.selected_hotbar_slot {
+                                        [1.0, 1.0, 0.0, 0.8] // Yellow selected
+                                    } else {
+                                        [0.4, 0.4, 0.4, 0.6] // Gray
+                                    },
+                                });
+                            }
+                            
+                            // Draw and present
+                            renderer.draw_quads(&mut encoder, &view, &quads);
+                            renderer.queue.submit(Some(encoder.finish()));
+                            renderer.present(frame);
+                        }
                     }
                     
                     if let Some(window) = &self.window {
@@ -2478,9 +2616,24 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                     player_entity.y = player_y;
                 }
                 
-                // Dig/place
-                let world_x = (state.mouse_pos.0 + state.camera_x - 512.0) / 4.0;
-                let world_y = (state.mouse_pos.1 + state.camera_y - 384.0) / 4.0;
+                // Mouse world coordinates via camera
+                let screen_width = if let Some(renderer) = &self.renderer {
+                    renderer.config.width as f32
+                } else {
+                    1024.0
+                };
+                let screen_height = if let Some(renderer) = &self.renderer {
+                    renderer.config.height as f32
+                } else {
+                    768.0
+                };
+                let cell_size = 8.0;
+                
+                let view_x = state.camera_x - screen_width / (2.0 * cell_size);
+                let view_y = state.camera_y - screen_height / (2.0 * cell_size);
+                
+                let world_x = view_x + state.mouse_pos.0 / cell_size;
+                let world_y = view_y + state.mouse_pos.1 / cell_size;
                 let cell_x = world_x as i32;
                 let cell_y = world_y as i32;
                 
@@ -2634,6 +2787,7 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
     let event_loop = EventLoop::new()?;
     let mut app = TerrariaApp {
         window: None,
+        renderer: None,
         game_state: game_state.clone(),
         engine: engine as *mut Engine,
     };

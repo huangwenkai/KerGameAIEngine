@@ -8,8 +8,6 @@ license.workspace = true
 [dependencies]
 wgpu = { workspace = true }
 winit = { workspace = true }
-bytemuck = { workspace = true }
-pollster = { workspace = true }
 log = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -21,3 +19,5 @@ glam = { workspace = true }
 sha2 = { workspace = true }
 hecs = { workspace = true }
 image = { workspace = true }
+bytemuck = { workspace = true }
+pollster = { workspace = true }

@@ -247,7 +247,7 @@ impl ItemRegistry {
 
 /// World item manager (dropped items in world)
 pub struct WorldItems {
-    items: Vec<DroppedItem>,
+    pub items: Vec<DroppedItem>,
 }
 
 impl WorldItems {
