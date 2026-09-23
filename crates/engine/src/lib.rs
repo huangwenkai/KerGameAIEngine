@@ -32,6 +32,7 @@ pub mod animation;
 pub mod character;
 pub mod structures;
 pub mod needs;
+pub mod enemy_ai;
 
 #[cfg(test)]
 mod replay_tests;

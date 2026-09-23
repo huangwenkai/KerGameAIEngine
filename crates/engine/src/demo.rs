@@ -1694,6 +1694,192 @@ impl Demo for M19Demo {
     }
 }
 
+/// M20 demo: Combat depth with diverse enemies
+pub struct M20Demo;
+
+impl Demo for M20Demo {
+    fn id(&self) -> &str {
+        "M20"
+    }
+    
+    fn description(&self) -> &str {
+        "M20 combat depth: diverse enemies + player attack + loot drops (10s)"
+    }
+    
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Starting M20 combat depth demo...");
+        
+        // Generate small test world
+        let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
+        for chunk_y in -1..=1 {
+            for chunk_x in -1..=1 {
+                terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(chunk_x, chunk_y));
+            }
+        }
+        
+        // Find safe spawn
+        let mut spawn_x = 64.0;
+        let mut spawn_y = -50.0;
+        for y in (-60..-10).rev() {
+            let cell_below = engine.chunk_world.get_cell(16, y + 1);
+            let cell_here = engine.chunk_world.get_cell(16, y);
+            if cell_below != crate::chunk::Material::Air && cell_here == crate::chunk::Material::Air {
+                spawn_x = 16.0 * 4.0;
+                spawn_y = y as f32 * 4.0;
+                break;
+            }
+        }
+        
+        log::info!("Spawning player at ({:.0}, {:.0})", spawn_x, spawn_y);
+        
+        // Setup combat
+        let mut combat = crate::combat::CombatSystem::new();
+        let player_id = combat.spawn_entity("Player", spawn_x, spawn_y, 100, 10, 3);
+        
+        // Item registry
+        let mut registry = crate::items::ItemRegistry::new();
+        let stone_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_material(stone_id, "Stone", 999));
+        let dirt_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_material(dirt_id, "Dirt", 999));
+        
+        // Spawn diverse enemies
+        let mut enemy_ids = Vec::new();
+        let mut enemy_ais = Vec::new();
+        
+        // 3 Slimes
+        for i in 0..3 {
+            let ex = spawn_x + (i as f32 - 1.0) * 50.0;
+            let ey = spawn_y - 10.0;
+            let enemy_id = combat.spawn_entity(&format!("Slime{}", i), ex, ey, 30, 4, 2);
+            if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+                enemy.loot_table.add_entry(stone_id, 1, 3, 0.9);
+            }
+            enemy_ids.push(enemy_id);
+            enemy_ais.push(crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Slime, ex, ey));
+        }
+        
+        // 2 Flyers
+        for i in 0..2 {
+            let ex = spawn_x + (i as f32 - 0.5) * 70.0;
+            let ey = spawn_y - 40.0;
+            let enemy_id = combat.spawn_entity(&format!("Flyer{}", i), ex, ey, 20, 3, 1);
+            if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+                enemy.loot_table.add_entry(dirt_id, 1, 2, 0.7);
+            }
+            enemy_ids.push(enemy_id);
+            enemy_ais.push(crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Flyer, ex, ey));
+        }
+        
+        // 1 Crawler
+        let ex = spawn_x + 90.0;
+        let ey = spawn_y;
+        let enemy_id = combat.spawn_entity("Crawler", ex, ey, 25, 5, 2);
+        if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+            enemy.loot_table.add_entry(stone_id, 2, 5, 0.8);
+        }
+        enemy_ids.push(enemy_id);
+        enemy_ais.push(crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Crawler, ex, ey));
+        
+        log::info!("Spawned {} enemies (3 slimes, 2 flyers, 1 crawler)", enemy_ids.len());
+        
+        // Player motor
+        let mut player = crate::physics::CharacterMotor::new(spawn_x, spawn_y);
+        
+        // Run 600 ticks (10 seconds)
+        let mut kill_count = 0u32;
+        let mut loot_count = 0u32;
+        
+        for tick in 0..600 {
+            let dt = engine.config.fixed_timestep.as_secs_f32();
+            
+            // Player moves
+            if tick % 40 < 20 {
+                player.move_input(1.0, dt);
+            } else {
+                player.move_input(-1.0, dt);
+            }
+            
+            if tick % 60 == 0 {
+                player.jump();
+            }
+            
+            player.apply_friction(dt);
+            player.update(dt, &mut engine.chunk_world);
+            
+            // Update player combat entity
+            if let Some(p) = combat.get_entity_mut(player_id) {
+                p.x = player.aabb.center_x();
+                p.y = player.aabb.center_y();
+            }
+            
+            // Update enemy AIs
+            let player_x = player.aabb.center_x();
+            let player_y = player.aabb.center_y();
+            
+            for (i, enemy_ai) in enemy_ais.iter_mut().enumerate() {
+                if i < enemy_ids.len() {
+                    let enemy_id = enemy_ids[i];
+                    if let Some(enemy) = combat.get_entity(enemy_id) {
+                        if enemy.is_alive() {
+                            drop(enemy);
+                            enemy_ai.update(dt, player_x, player_y, &mut engine.chunk_world);
+                            
+                            let ai_x = enemy_ai.aabb.center_x();
+                            let ai_y = enemy_ai.aabb.center_y();
+                            
+                            if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+                                enemy.x = ai_x;
+                                enemy.y = ai_y;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Player attacks nearby enemies
+            if tick % 15 == 0 {
+                for &enemy_id in &enemy_ids {
+                    if let Some(enemy) = combat.get_entity(enemy_id) {
+                        if enemy.is_alive() {
+                            let dx = enemy.x - player_x;
+                            let dy = enemy.y - player_y;
+                            let dist = (dx * dx + dy * dy).sqrt();
+                            
+                            if dist < 40.0 {
+                                drop(enemy);
+                                combat.attack(player_id, enemy_id);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Remove dead, count kills, collect loot
+            let dead = combat.remove_dead();
+            for entity in dead {
+                kill_count += 1;
+                let loot = entity.loot_table.roll_loot(&mut engine.rng);
+                loot_count += loot.iter().map(|s| s.count).sum::<u32>();
+            }
+            
+            engine.tick()?;
+        }
+        
+        log::info!("M20 complete: {} kills, {} loot items collected", kill_count, loot_count);
+        
+        // Assertions
+        assert!(kill_count > 0, "Should kill at least one enemy");
+        assert!(loot_count > 0, "Should collect at least one loot item");
+        
+        let player_entity = combat.get_entity(player_id).unwrap();
+        assert!(player_entity.is_alive(), "Player should survive");
+        
+        Ok(())
+    }
+}
+
 /// SHOWCASE demo: Unified experience entrypoint covering all features
 pub struct ShowcaseDemo;
 
@@ -2860,20 +3046,43 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
     // Setup lighting
     engine.light_map.set_ambient(100);
     
-    // Spawn enemies
+    // Spawn diverse enemies near player
     let mut enemy_ids = Vec::new();
-    for i in 0..5 {
-        let x = 200.0 + i as f32 * 80.0;
-        let y = 50.0;
-        let enemy_id = combat.spawn_entity(&format!("Enemy{}", i), x, y, 30, 5, 2);
-        
+    let mut enemy_ais = Vec::new();
+    
+    // 2 Slimes
+    for i in 0..2 {
+        let ex = spawn_x + (i as f32 - 0.5) * 60.0;
+        let ey = spawn_y - 20.0;
+        let enemy_id = combat.spawn_entity(&format!("Slime{}", i), ex, ey, 30, 5, 2);
         if let Some(enemy) = combat.get_entity_mut(enemy_id) {
             enemy.loot_table.add_entry(stone_id, 1, 3, 0.8);
-            enemy.loot_table.add_entry(dirt_id, 1, 5, 0.6);
         }
-        
         enemy_ids.push(enemy_id);
+        enemy_ais.push(crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Slime, ex, ey));
     }
+    
+    // 1 Flyer
+    let ex = spawn_x + 80.0;
+    let ey = spawn_y - 50.0;
+    let enemy_id = combat.spawn_entity("Flyer", ex, ey, 25, 4, 2);
+    if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+        enemy.loot_table.add_entry(stone_id, 1, 2, 0.6);
+    }
+    enemy_ids.push(enemy_id);
+    enemy_ais.push(crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Flyer, ex, ey));
+    
+    // 1 Crawler
+    let ex = spawn_x - 60.0;
+    let ey = spawn_y;
+    let enemy_id = combat.spawn_entity("Crawler", ex, ey, 20, 3, 1);
+    if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+        enemy.loot_table.add_entry(dirt_id, 1, 5, 0.7);
+    }
+    enemy_ids.push(enemy_id);
+    enemy_ais.push(crate::enemy_ai::EnemyAI::new(crate::enemy_ai::EnemyType::Crawler, ex, ey));
+    
+    log::info!("Spawned {} enemies (2 slimes, 1 flyer, 1 crawler)", enemy_ids.len());
     
     log::info!("Creating window...");
     
@@ -2889,6 +3098,8 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         dirt_id: u32,
         selected_hotbar_slot: usize,
         enemy_ids: Vec<u32>,
+        enemy_ais: Vec<crate::enemy_ai::EnemyAI>,
+        kill_count: u32,
         rng: crate::rng::GameRng,
         camera_x: f32,
         camera_y: f32,
@@ -2911,6 +3122,7 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         move_right: bool,
         jump_pressed: bool,
         shift_pressed: bool,
+        attack_pressed: bool,
         mouse_pos: (f32, f32),
         dig_pressed: bool,
         place_pressed: bool,
@@ -2973,6 +3185,8 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         dirt_id,
         selected_hotbar_slot,
         enemy_ids,
+        enemy_ais,
+        kill_count: 0,
         rng,
         camera_x: spawn_x / 4.0, // Convert physics pixels to world cells
         camera_y: spawn_y / 4.0,
@@ -2992,6 +3206,7 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         move_right: false,
         jump_pressed: false,
         shift_pressed: false,
+        attack_pressed: false,
         mouse_pos: (0.0, 0.0),
         dig_pressed: false,
         place_pressed: false,
@@ -3203,18 +3418,24 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                                 });
                             }
                             
-                            // Enemies
-                            for &enemy_id in &state.enemy_ids {
+                            // Enemies (colored by type)
+                            for (i, &enemy_id) in state.enemy_ids.iter().enumerate() {
                                 if let Some(enemy) = state.combat.get_entity(enemy_id) {
-                                    if enemy.is_alive() {
+                                    if enemy.is_alive() && i < state.enemy_ais.len() {
                                         let ex = (enemy.x / 4.0 - view_x) * cell_size;
                                         let ey = (enemy.y / 4.0 - view_y) * cell_size;
+                                        let enemy_ai = &state.enemy_ais[i];
+                                        let (w, h) = match enemy_ai.enemy_type {
+                                            crate::enemy_ai::EnemyType::Slime => (12.0, 12.0),
+                                            crate::enemy_ai::EnemyType::Flyer => (10.0, 8.0),
+                                            crate::enemy_ai::EnemyType::Crawler => (8.0, 6.0),
+                                        };
                                         quads.push(crate::render::QuadInstance {
                                             x: ex,
                                             y: ey,
-                                            width: 12.0,
-                                            height: 12.0,
-                                            color: [1.0, 0.0, 0.0, 1.0], // Red
+                                            width: w,
+                                            height: h,
+                                            color: enemy_ai.get_color(),
                                         });
                                     }
                                 }
@@ -3373,14 +3594,40 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                     player_entity.y = player_y;
                 }
                 
+                // Update enemy AIs
+                let player_pos_copy = (player_x, player_y);
+                let enemy_ids_len = state.enemy_ids.len();
+                
+                for i in 0..enemy_ids_len.min(state.enemy_ais.len()) {
+                    let enemy_id = state.enemy_ids[i];
+                    if let Some(enemy) = state.combat.get_entity(enemy_id) {
+                        if enemy.is_alive() {
+                            drop(enemy);
+                            state.enemy_ais[i].update(dt, player_pos_copy.0, player_pos_copy.1, &mut engine.chunk_world);
+                            
+                            // Get AI position before sync
+                            let ai_x = state.enemy_ais[i].aabb.center_x();
+                            let ai_y = state.enemy_ais[i].aabb.center_y();
+                            
+                            // Sync AI position to combat entity
+                            if let Some(enemy) = state.combat.get_entity_mut(enemy_id) {
+                                enemy.x = ai_x;
+                                enemy.y = ai_y;
+                            }
+                        }
+                    }
+                }
+                
                 // Update NPCs: needs, goals, movement, animations
                 let water = state.water_sources.first().copied();
                 let food = state.food_sources.first().copied();
                 let bed = state.bed_locations.first().copied();
-                let selector_copy = state.goal_selector.clone();
+                let goal_selector = state.goal_selector.clone();
                 
-                for (npc, animator) in &mut state.npcs {
-                    npc.update(dt, &selector_copy);
+                let npc_len = state.npcs.len();
+                for i in 0..npc_len {
+                    let (npc, animator) = &mut state.npcs[i];
+                    npc.update(dt, &goal_selector);
                     
                     // Find target if needed
                     if npc.target.is_none() && npc.current_goal != crate::needs::GoalType::Idle {
@@ -3521,8 +3768,8 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                     }
                 }
                 
-                // Player auto-attack
-                if tick_count % 20 == 0 {
+                // Player attack key (J)
+                if state.attack_pressed && tick_count % 15 == 0 {
                     for &enemy_id in &enemy_ids_copy {
                         if let Some(enemy) = state.combat.get_entity(enemy_id) {
                             if enemy.is_alive() {
@@ -3540,9 +3787,10 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                     }
                 }
                 
-                // Remove dead enemies
+                // Remove dead enemies and count kills
                 let dead = state.combat.remove_dead();
                 for entity in dead {
+                    state.kill_count += 1;
                     let loot = entity.loot_table.roll_loot(&mut state.rng);
                     for stack in loot {
                         state.world_items.drop_item(entity.x, entity.y, stack);
@@ -3658,6 +3906,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M17Demo));
         registry.demos.push(Box::new(M18Demo));
         registry.demos.push(Box::new(M19Demo));
+        registry.demos.push(Box::new(M20Demo));
         
         registry
     }
