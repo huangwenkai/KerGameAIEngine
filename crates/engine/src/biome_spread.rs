@@ -98,14 +98,14 @@ mod tests {
             }
         }
         
-        let initial_dirt = count_material(&world, Material::Dirt, -10, 10, -10, 10);
+        let initial_dirt = count_material(&mut world, Material::Dirt, -10, 10, -10, 10);
         
         // Run for 5 seconds
         for _ in 0..300 {
             spread.update(1.0 / 60.0, &mut world, &mut rng);
         }
         
-        let final_dirt = count_material(&world, Material::Dirt, -10, 10, -10, 10);
+        let final_dirt = count_material(&mut world, Material::Dirt, -10, 10, -10, 10);
         
         // Some conversion should have occurred
         assert_ne!(initial_dirt, final_dirt);
