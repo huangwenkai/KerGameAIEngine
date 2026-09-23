@@ -22,6 +22,7 @@ pub mod automata;
 pub mod lighting;
 pub mod items;
 pub mod combat;
+pub mod magic;
 
 #[cfg(test)]
 mod replay_tests;

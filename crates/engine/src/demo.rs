@@ -1222,6 +1222,137 @@ impl Demo for M9Demo {
     }
 }
 
+/// M10 demo: Magic system
+pub struct M10Demo;
+
+impl Demo for M10Demo {
+    fn id(&self) -> &str {
+        "M10"
+    }
+
+    fn description(&self) -> &str {
+        "M10 magic: spells, mana, combos, element system"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M10 demo: {}", self.description());
+        
+        let crafter = crate::magic::SpellCrafter::new();
+        let mut caster = crate::magic::Spellcaster::new(200, 10, 20);
+        let mut rng = crate::rng::GameRng::new(engine.config.seed);
+        
+        log::info!("Spell recipes known: {}", crafter.recipe_count());
+        
+        // Phase 1: Cast single-element spells (200 ticks)
+        log::info!("Phase 1: Cast single-element spells (200 ticks)");
+        let mut spells_cast = 0;
+        let mut mana_spent = 0;
+        
+        for _tick in 0..200 {
+            engine.tick()?;
+            caster.update();
+            
+            // Try to cast a random single-element spell
+            let element = match rng.gen_u32() % 4 {
+                0 => crate::magic::Element::Fire,
+                1 => crate::magic::Element::Water,
+                2 => crate::magic::Element::Earth,
+                _ => crate::magic::Element::Air,
+            };
+            
+            let cost = 15 + (rng.gen_u32() % 10) as i32;
+            if caster.can_cast(cost) {
+                let component = crate::magic::SpellComponent {
+                    element,
+                    power: cost,
+                    mana_cost: cost,
+                };
+                
+                if let Some(_spell) = crafter.craft_spell(&[component]) {
+                    if caster.cast_spell(cost) {
+                        spells_cast += 1;
+                        mana_spent += cost;
+                    }
+                }
+            }
+        }
+        
+        log::info!("After phase 1: {} spells cast, {} mana spent, mana: {}/{}",
+                   spells_cast, mana_spent, caster.mana.current, caster.mana.max);
+        
+        // Phase 2: Cast combo spells (300 ticks)
+        log::info!("Phase 2: Cast combo spells (300 ticks)");
+        let mut combos_cast = 0;
+        let mut combo_power = 0;
+        
+        for _tick in 200..500 {
+            engine.tick()?;
+            caster.update();
+            
+            // Try to cast a two-element combo
+            let element1 = match rng.gen_u32() % 6 {
+                0 => crate::magic::Element::Fire,
+                1 => crate::magic::Element::Water,
+                2 => crate::magic::Element::Earth,
+                3 => crate::magic::Element::Air,
+                4 => crate::magic::Element::Light,
+                _ => crate::magic::Element::Dark,
+            };
+            
+            let element2 = match rng.gen_u32() % 6 {
+                0 => crate::magic::Element::Fire,
+                1 => crate::magic::Element::Water,
+                2 => crate::magic::Element::Earth,
+                3 => crate::magic::Element::Air,
+                4 => crate::magic::Element::Light,
+                _ => crate::magic::Element::Dark,
+            };
+            
+            let components = vec![
+                crate::magic::SpellComponent { element: element1, power: 15, mana_cost: 15 },
+                crate::magic::SpellComponent { element: element2, power: 15, mana_cost: 15 },
+            ];
+            
+            let total_cost = 30;
+            if caster.can_cast(total_cost) {
+                if let Some(spell) = crafter.craft_spell(&components) {
+                    if caster.cast_spell(total_cost) {
+                        combos_cast += 1;
+                        combo_power += spell.total_power;
+                        spells_cast += 1;
+                        mana_spent += total_cost;
+                    }
+                }
+            }
+        }
+        
+        log::info!("After phase 2: {} combos cast, {} total combo power",
+                   combos_cast, combo_power);
+        
+        // Phase 3: Mana regeneration test (100 ticks)
+        log::info!("Phase 3: Mana regeneration (100 ticks)");
+        caster.mana.current = 0; // Deplete mana
+        
+        for _tick in 500..600 {
+            engine.tick()?;
+            caster.update();
+        }
+        
+        log::info!("M10 demo completed: {} ticks", engine.tick_count());
+        log::info!("Total spells cast: {}", spells_cast);
+        log::info!("Combo spells: {}", combos_cast);
+        log::info!("Total mana spent: {}", mana_spent);
+        log::info!("Final mana: {}/{} ({:.0}%)", 
+                   caster.mana.current, caster.mana.max, caster.mana.percent() * 100.0);
+        
+        assert!(spells_cast > 50, "Should have cast spells");
+        assert!(combos_cast > 10, "Should have cast combos");
+        assert!(caster.mana.current > 50, "Mana should regenerate");
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -1244,6 +1375,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M7Demo));
         registry.demos.push(Box::new(M8Demo));
         registry.demos.push(Box::new(M9Demo));
+        registry.demos.push(Box::new(M10Demo));
         
         registry
     }
