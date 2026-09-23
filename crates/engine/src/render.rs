@@ -239,6 +239,44 @@ impl SpriteBatch {
             base_idx + 3,
         ]);
     }
+
+    /// Add a rotated/scaled quad for skeletal animation
+    pub fn add_quad_transformed(&mut self, x: f32, y: f32, w: f32, h: f32, 
+                                 rotation: f32, scale_x: f32, scale_y: f32, color: [f32; 4]) {
+        let base_idx = self.vertices.len() as u16;
+        
+        let cos = rotation.cos();
+        let sin = rotation.sin();
+        
+        let hw = w * 0.5 * scale_x;
+        let hh = h * 0.5 * scale_y;
+        
+        let corners = [
+            (-hw, -hh),
+            ( hw, -hh),
+            ( hw,  hh),
+            (-hw,  hh),
+        ];
+        
+        for (dx, dy) in corners.iter() {
+            let rx = dx * cos - dy * sin;
+            let ry = dx * sin + dy * cos;
+            
+            self.vertices.push(SpriteVertex {
+                position: [x + rx, y + ry],
+                color,
+            });
+        }
+        
+        self.indices.extend_from_slice(&[
+            base_idx,
+            base_idx + 1,
+            base_idx + 2,
+            base_idx,
+            base_idx + 2,
+            base_idx + 3,
+        ]);
+    }
     
     pub fn vertex_count(&self) -> usize {
         self.vertices.len()

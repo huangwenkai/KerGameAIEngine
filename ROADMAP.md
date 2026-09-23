@@ -241,6 +241,26 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
+### M15: 2D骨骼动画系统 ✓ COMPLETE (2026-09-23)
+**目标**: Action game feel (Terraria×Noita×Diablo)
+- 骨骼层级 (parent index, local/world transforms)
+- 关键帧动画 (位置/旋转/缩放插值)
+- Slot/Attachment (精灵绑定到骨骼)
+- 动画状态机 (play/loop, crossfade基础)
+- 事件轨道 (hit, can_cancel等战斗钩子)
+- 确定性采样 (fixed timestep驱动)
+- JSON格式 (docs/skeleton_format.md)
+- M15 Demo: Humanoid骨骼 (5 bones), idle/attack clips, 600 ticks
+
+**验收**:
+- 层级变换正确计算
+- 关键帧插值平滑
+- 事件在正确时间触发
+- Headless运行成功
+- 测试覆盖bind pose, 父子变换, 采样
+
+---
+
 ## Demo设计原则
 
 1. **短而精**: 5–15秒典型运行时长

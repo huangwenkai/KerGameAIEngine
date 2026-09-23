@@ -906,6 +906,183 @@ impl Demo for M7Demo {
     }
 }
 
+/// M15 demo: 2D skeletal animation
+pub struct M15Demo;
+
+impl Demo for M15Demo {
+    fn id(&self) -> &str {
+        "M15"
+    }
+
+    fn description(&self) -> &str {
+        "M15 skeletal animation: 2D bones + keyframes + event tracks + sprite rendering"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M15 demo: {}", self.description());
+        
+        // Phase 1: Create skeleton (humanoid: root, body, arm_left, arm_right, head)
+        log::info!("Phase 1: Building skeleton");
+        let mut skeleton = crate::animation::Skeleton::new("humanoid".to_string());
+        
+        let root_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "root".to_string(),
+            None,
+            crate::animation::Transform2D::new(0.0, 0.0),
+        ));
+        
+        let body_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "body".to_string(),
+            Some(root_idx),
+            crate::animation::Transform2D::new(0.0, 10.0),
+        ));
+        
+        let arm_left_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "arm_left".to_string(),
+            Some(body_idx),
+            crate::animation::Transform2D::new(-8.0, 0.0),
+        ));
+        
+        let arm_right_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "arm_right".to_string(),
+            Some(body_idx),
+            crate::animation::Transform2D::new(8.0, 0.0),
+        ));
+        
+        let head_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "head".to_string(),
+            Some(body_idx),
+            crate::animation::Transform2D::new(0.0, 16.0),
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "body_sprite".to_string(),
+            body_idx,
+            12.0,
+            20.0,
+            [0.8, 0.2, 0.2, 1.0],
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "arm_left_sprite".to_string(),
+            arm_left_idx,
+            6.0,
+            12.0,
+            [0.2, 0.8, 0.2, 1.0],
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "arm_right_sprite".to_string(),
+            arm_right_idx,
+            6.0,
+            12.0,
+            [0.2, 0.2, 0.8, 1.0],
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "head_sprite".to_string(),
+            head_idx,
+            10.0,
+            10.0,
+            [1.0, 0.8, 0.6, 1.0],
+        ));
+        
+        log::info!("Skeleton created: {} bones, {} attachments", 
+                   skeleton.bones.len(), skeleton.attachments.len());
+        
+        // Phase 2: Create animation clips
+        log::info!("Phase 2: Creating animation clips");
+        
+        let mut idle_clip = crate::animation::AnimationClip::new("idle".to_string(), 2.0, true);
+        
+        let mut body_track = crate::animation::BoneTrack::new(body_idx);
+        body_track.add_keyframe(0.0, crate::animation::Transform2D::new(0.0, 10.0));
+        body_track.add_keyframe(1.0, crate::animation::Transform2D::new(0.0, 12.0));
+        body_track.add_keyframe(2.0, crate::animation::Transform2D::new(0.0, 10.0));
+        idle_clip.add_track(body_track);
+        
+        let mut attack_clip = crate::animation::AnimationClip::new("attack".to_string(), 0.8, false);
+        
+        let mut arm_right_track = crate::animation::BoneTrack::new(arm_right_idx);
+        let mut t = crate::animation::Transform2D::new(8.0, 0.0);
+        arm_right_track.add_keyframe(0.0, t);
+        
+        t = crate::animation::Transform2D::new(8.0, 0.0);
+        t.rotation = -0.5;
+        arm_right_track.add_keyframe(0.2, t);
+        
+        t = crate::animation::Transform2D::new(8.0, 0.0);
+        t.rotation = 1.0;
+        arm_right_track.add_keyframe(0.5, t);
+        
+        t = crate::animation::Transform2D::new(8.0, 0.0);
+        t.rotation = 0.0;
+        arm_right_track.add_keyframe(0.8, t);
+        
+        attack_clip.add_track(arm_right_track);
+        attack_clip.add_event(0.5, "hit".to_string());
+        attack_clip.add_event(0.6, "can_cancel".to_string());
+        
+        log::info!("Created clips: idle (looping, 2.0s), attack (oneshot, 0.8s, 2 events)");
+        
+        let mut animator = crate::animation::Animator::new(skeleton);
+        animator.add_clip(idle_clip);
+        animator.add_clip(attack_clip);
+        
+        // Phase 3: Run animation (600 ticks = 10 seconds)
+        log::info!("Phase 3: Running animation simulation (600 ticks)");
+        let dt = engine.config.fixed_timestep.as_secs_f32();
+        
+        animator.play("idle")?;
+        
+        let mut total_events = 0;
+        let mut attack_triggered = 0;
+        
+        for tick in 0..600 {
+            engine.tick()?;
+            
+            animator.update(dt);
+            
+            let events = animator.take_events();
+            total_events += events.len();
+            
+            if tick == 200 || tick == 400 {
+                log::info!("  Tick {}: Triggering attack animation", tick);
+                animator.play("attack")?;
+                attack_triggered += 1;
+            }
+            
+            if tick % 100 == 0 {
+                log::info!("  Tick {}: time={:.2}s, finished={}", 
+                           tick, animator.current_time(), animator.is_finished());
+            }
+        }
+        
+        log::info!("Animation simulation complete");
+        log::info!("Total events fired: {}", total_events);
+        log::info!("Attack animations triggered: {}", attack_triggered);
+        
+        // Phase 4: Verify bind pose and transformations
+        log::info!("Phase 4: Verifying bone transformations");
+        animator.play("idle")?;
+        animator.update(0.0);
+        
+        let sprites = animator.emit_sprites();
+        log::info!("Emitted {} sprites for rendering", sprites.len());
+        
+        assert_eq!(sprites.len(), 4, "Should have 4 sprite attachments");
+        assert_eq!(animator.skeleton.bones.len(), 5, "Should have 5 bones");
+        assert!(total_events >= 4, "Should have fired hit/can_cancel events (got {})", total_events);
+        
+        log::info!("M15 demo completed: {} ticks", engine.tick_count());
+        log::info!("Skeleton: {} bones", animator.skeleton.bones.len());
+        log::info!("Attachments: {} sprites", animator.skeleton.attachments.len());
+        log::info!("Events fired: {}", total_events);
+        
+        Ok(())
+    }
+}
+
 /// M8 demo: Item system
 pub struct M8Demo;
 
@@ -1468,12 +1645,16 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M6Demo));
         registry.demos.push(Box::new(M7Demo));
         registry.demos.push(Box::new(M8Demo));
+<<<<<<< HEAD
         registry.demos.push(Box::new(M9Demo));
         registry.demos.push(Box::new(M10Demo));
         registry.demos.push(Box::new(M11Demo));
         registry.demos.push(Box::new(M12Demo));
         registry.demos.push(Box::new(M13Demo));
         registry.demos.push(Box::new(M14Demo));
+=======
+        registry.demos.push(Box::new(M15Demo));
+>>>>>>> d5eb102 ([M15] Implement 2D skeletal animation system)
         
         registry
     }
