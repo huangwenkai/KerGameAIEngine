@@ -17,6 +17,7 @@ pub mod ecs;
 pub mod render;
 pub mod chunk;
 pub mod terrain;
+pub mod biomes;
 pub mod physics;
 pub mod automata;
 pub mod lighting;

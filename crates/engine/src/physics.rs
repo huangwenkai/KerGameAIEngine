@@ -101,10 +101,28 @@ impl CharacterMotor {
         // Move X
         let move_x = self.velocity_x * dt;
         let target_x = self.aabb.translate(move_x, 0.0);
-        if !collides_with_world(&target_x, world) {
+        let was_blocked_x = collides_with_world(&target_x, world);
+        
+        if !was_blocked_x {
             self.aabb = target_x;
         } else {
-            self.velocity_x = 0.0;
+            // Try step-up when grounded and horizontally blocked
+            let mut stepped = false;
+            if self.on_ground && self.velocity_x.abs() > 10.0 {
+                let step_height = 8.0; // 2 cells
+                let step_up = self.aabb.translate(0.0, -step_height);
+                if !collides_with_world(&step_up, world) {
+                    let step_forward = step_up.translate(self.velocity_x.signum() * 4.0, 0.0);
+                    if !collides_with_world(&step_forward, world) {
+                        self.aabb = step_up;
+                        stepped = true;
+                    }
+                }
+            }
+            
+            if !stepped {
+                self.velocity_x = 0.0;
+            }
         }
 
         // Move Y
@@ -119,18 +137,6 @@ impl CharacterMotor {
                 self.on_ground = true;
             }
             self.velocity_y = 0.0;
-        }
-
-        // Step-up (climb small obstacles)
-        if !self.on_ground && self.velocity_x.abs() > 10.0 {
-            let step_height = 8.0; // 2 cells
-            let step_up = self.aabb.translate(0.0, -step_height);
-            if !collides_with_world(&step_up, world) {
-                let step_forward = step_up.translate(self.velocity_x.signum() * 4.0, 0.0);
-                if !collides_with_world(&step_forward, world) {
-                    self.aabb = step_up;
-                }
-            }
         }
     }
 }

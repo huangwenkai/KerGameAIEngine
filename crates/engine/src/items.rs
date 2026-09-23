@@ -210,6 +210,7 @@ impl Inventory {
 }
 
 /// Item registry (database of all item definitions)
+#[derive(Debug, Clone)]
 pub struct ItemRegistry {
     items: HashMap<ItemId, ItemDef>,
     next_id: ItemId,
@@ -246,7 +247,7 @@ impl ItemRegistry {
 
 /// World item manager (dropped items in world)
 pub struct WorldItems {
-    items: Vec<DroppedItem>,
+    pub items: Vec<DroppedItem>,
 }
 
 impl WorldItems {
