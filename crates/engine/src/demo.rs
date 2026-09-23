@@ -2368,7 +2368,7 @@ pub fn run_demo_windowed(demo_id: &str, seed: u64) -> Result<DemoReport> {
 
     let mut engine = Engine::new(config);
     let start_time = Instant::now();
-    let mut last_render = Instant::now();
+    let mut last_sim_tick = Instant::now();
     let mut demo_completed = false;
     let mut showcase_initialized = false;
     
@@ -2396,6 +2396,86 @@ pub fn run_demo_windowed(demo_id: &str, seed: u64) -> Result<DemoReport> {
                     }
                 }
                 WindowEvent::RedrawRequested => {
+                    // Initialize SHOWCASE-specific state once
+                    if !showcase_initialized && demo.id() == "SHOWCASE" {
+                        let terrain_gen = crate::terrain::TerrainGenerator::new(seed);
+                        for cy in -1..=1 {
+                            for cx in -1..=1 {
+                                terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
+                            }
+                        }
+                        for _ in 0..500 {
+                            let x = engine.rng.gen_range(0.0..1000.0);
+                            let y = engine.rng.gen_range(0.0..1000.0);
+                            engine.ecs.spawn_entity(x, y, engine.rng.gen_range(-50.0..50.0), engine.rng.gen_range(-50.0..50.0), 100.0);
+                        }
+                        engine.light_map.set_ambient(32);
+                        for i in 0..3 {
+                            engine.light_map.add_light(crate::lighting::PointLight::new(70 + i * 15, 40, 200));
+                        }
+                        showcase_initialized = true;
+                        log::info!("SHOWCASE initialized");
+                    }
+                    
+                    // Advance simulation: 1 tick per frame, gated at ~60 TPS
+                    if !demo_completed {
+                        let target_ticks = match demo.id() {
+                            "SHOWCASE" => 1860,
+                            _ => 600,
+                        };
+                        
+                        // Only tick if enough wall-clock time has passed (~16.67ms for 60 TPS)
+                        let time_per_tick = std::time::Duration::from_nanos(16_666_667); // 1/60 second
+                        if engine.tick_count() < target_ticks && last_sim_tick.elapsed() >= time_per_tick {
+                            // Advance simulation by 1 tick
+                            if let Err(e) = engine.tick() {
+                                log::error!("Tick error: {}", e);
+                                demo_completed = true;
+                                *result_clone.lock().unwrap() = Some(Err(e));
+                                elwt.exit();
+                                return;
+                            }
+                            
+                            // SHOWCASE chapter-specific actions
+                            if demo.id() == "SHOWCASE" {
+                                let tick = engine.tick_count();
+                                if tick >= 900 && tick < 1080 && tick % 6 == 0 {
+                                    let sand_x = 60 + ((tick - 900) % 6) as i32;
+                                    engine.queue_command(crate::commands::Command::PlaceCell { 
+                                        x: sand_x, y: -10, material: crate::chunk::Material::Sand 
+                                    });
+                                    engine.physics_sim.wake_cell(sand_x, -10);
+                                    if tick % 12 == 0 {
+                                        let water_x = 70 + ((tick - 900) % 5) as i32;
+                                        engine.queue_command(crate::commands::Command::PlaceCell { 
+                                            x: water_x, y: -10, material: crate::chunk::Material::Water 
+                                        });
+                                        engine.physics_sim.wake_cell(water_x, -10);
+                                    }
+                                }
+                            }
+                            
+                            last_sim_tick += time_per_tick;
+                        } else if engine.tick_count() >= target_ticks {
+                            // Simulation complete
+                            demo_completed = true;
+                            let report = DemoReport::success(
+                                demo.id().to_string(),
+                                seed,
+                                engine.tick_count(),
+                                start_time.elapsed(),
+                                engine.time.sim_time,
+                                engine.replay_hash(),
+                            );
+                            *result_clone.lock().unwrap() = Some(Ok(report));
+                            log::info!("Demo complete: {} ticks in {:.2}s wall-clock", engine.tick_count(), start_time.elapsed().as_secs_f32());
+                            // Keep window open to show final frame
+                            std::thread::sleep(std::time::Duration::from_millis(1000));
+                            elwt.exit();
+                            return;
+                        }
+                    }
+                    
                     // Render current frame
                     match render_ctx.surface.get_current_texture() {
                         Ok(frame) => {
@@ -2462,85 +2542,8 @@ pub fn run_demo_windowed(demo_id: &str, seed: u64) -> Result<DemoReport> {
                 _ => {}
             },
             Event::AboutToWait => {
-                // Initialize SHOWCASE-specific state once
-                if !showcase_initialized && demo.id() == "SHOWCASE" {
-                    let terrain_gen = crate::terrain::TerrainGenerator::new(seed);
-                    for cy in -1..=1 {
-                        for cx in -1..=1 {
-                            terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
-                        }
-                    }
-                    for _ in 0..500 {
-                        let x = engine.rng.gen_range(0.0..1000.0);
-                        let y = engine.rng.gen_range(0.0..1000.0);
-                        engine.ecs.spawn_entity(x, y, engine.rng.gen_range(-50.0..50.0), engine.rng.gen_range(-50.0..50.0), 100.0);
-                    }
-                    engine.light_map.set_ambient(32);
-                    for i in 0..3 {
-                        engine.light_map.add_light(crate::lighting::PointLight::new(70 + i * 15, 40, 200));
-                    }
-                    showcase_initialized = true;
-                    log::info!("SHOWCASE initialized");
-                }
-                
-                // Advance simulation incrementally (1 tick per frame)
-                if !demo_completed {
-                    let target_ticks = match demo.id() {
-                        "SHOWCASE" => 1860, // Full M0-M15
-                        _ => 600,
-                    };
-                    
-                    if engine.tick_count() < target_ticks {
-                        // Run 1 tick per frame for smooth real-time pacing
-                        if let Err(e) = engine.tick() {
-                            log::error!("Tick error: {}", e);
-                            demo_completed = true;
-                            *result_clone.lock().unwrap() = Some(Err(e));
-                            elwt.exit();
-                        }
-                        
-                        // SHOWCASE chapter-specific actions
-                        if demo.id() == "SHOWCASE" {
-                            let tick = engine.tick_count();
-                            // Chapter 6 physics: drop sand/water incrementally (ticks 900-1080)
-                            if tick >= 900 && tick < 1080 && tick % 6 == 0 {
-                                let sand_x = 60 + ((tick - 900) % 6) as i32;
-                                engine.queue_command(crate::commands::Command::PlaceCell { 
-                                    x: sand_x, y: -10, material: crate::chunk::Material::Sand 
-                                });
-                                engine.physics_sim.wake_cell(sand_x, -10);
-                                if tick % 12 == 0 {
-                                    let water_x = 70 + ((tick - 900) % 5) as i32;
-                                    engine.queue_command(crate::commands::Command::PlaceCell { 
-                                        x: water_x, y: -10, material: crate::chunk::Material::Water 
-                                    });
-                                    engine.physics_sim.wake_cell(water_x, -10);
-                                }
-                            }
-                        }
-                    } else {
-                        // Simulation complete
-                        demo_completed = true;
-                        let report = DemoReport::success(
-                            demo.id().to_string(),
-                            seed,
-                            engine.tick_count(),
-                            start_time.elapsed(),
-                            engine.time.sim_time,
-                            engine.replay_hash(),
-                        );
-                        *result_clone.lock().unwrap() = Some(Ok(report));
-                        // Keep window open to show final frame
-                        std::thread::sleep(std::time::Duration::from_millis(1000));
-                        elwt.exit();
-                    }
-                }
-                
-                // Request redraw at ~60 FPS
-                if last_render.elapsed() >= std::time::Duration::from_millis(16) {
-                    render_ctx.window.request_redraw();
-                    last_render = Instant::now();
-                }
+                // Request redraw at ~60 FPS to drive both sim and render
+                render_ctx.window.request_redraw();
             }
             _ => {}
         }
