@@ -36,6 +36,67 @@ impl Demo for M0Demo {
     }
 }
 
+/// M1 demo: Command execution and replay validation
+pub struct M1Demo;
+
+impl Demo for M1Demo {
+    fn id(&self) -> &str {
+        "M1"
+    }
+
+    fn description(&self) -> &str {
+        "M1 command replay: 1000 commands with deterministic execution"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M1 demo: {}", self.description());
+        
+        // Phase 1: Spawn 100 entities with random positions
+        log::info!("Phase 1: Spawning 100 entities");
+        for _ in 0..100 {
+            let x = engine.rng.gen_range(0.0..1000.0);
+            let y = engine.rng.gen_range(0.0..1000.0);
+            engine.queue_command(crate::commands::Command::SpawnEntity { x, y });
+        }
+        engine.tick()?;
+        
+        assert_eq!(engine.world.entity_count(), 100, "Should have 100 entities");
+        
+        // Phase 2: Apply random velocities to entities (900 commands)
+        log::info!("Phase 2: Applying velocities");
+        for tick in 0..30 {
+            for entity_id in 1..=100 {
+                if tick % 3 == 0 {
+                    let vx = engine.rng.gen_range(-10.0..10.0);
+                    let vy = engine.rng.gen_range(-10.0..10.0);
+                    engine.queue_command(crate::commands::Command::SetVelocity {
+                        entity_id,
+                        vx,
+                        vy,
+                    });
+                }
+            }
+            engine.tick()?;
+        }
+        
+        // Phase 3: Simulate for 10 more seconds (600 ticks)
+        log::info!("Phase 3: Simulating movement");
+        for _ in 0..600 {
+            engine.tick()?;
+        }
+        
+        log::info!("M1 demo completed: {} ticks, {} entities, final state hash: {}",
+                   engine.tick_count(),
+                   engine.world.entity_count(),
+                   engine.world.state_hash());
+        
+        // Verify state is non-trivial
+        assert!(engine.world.entity_count() > 0, "World should have entities");
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -47,8 +108,9 @@ impl DemoRegistry {
             demos: Vec::new(),
         };
         
-        // Register M0 demo
+        // Register demos
         registry.demos.push(Box::new(M0Demo));
+        registry.demos.push(Box::new(M1Demo));
         
         registry
     }

@@ -11,6 +11,11 @@ pub mod time;
 pub mod commands;
 pub mod replay;
 pub mod report;
+pub mod rng;
+pub mod state;
+
+#[cfg(test)]
+mod replay_tests;
 
 use anyhow::Result;
 use std::time::Duration;
@@ -36,9 +41,11 @@ impl Default for EngineConfig {
 /// Main engine context
 pub struct Engine {
     config: EngineConfig,
-    time: time::TimeState,
+    pub time: time::TimeState,
     command_buffer: commands::CommandBuffer,
     replay_hasher: replay::ReplayHasher,
+    pub rng: rng::GameRng,
+    pub world: state::World,
 }
 
 impl Engine {
@@ -52,6 +59,8 @@ impl Engine {
             time: time::TimeState::new(),
             command_buffer: commands::CommandBuffer::new(),
             replay_hasher: replay::ReplayHasher::new(seed),
+            rng: rng::GameRng::new(seed),
+            world: state::World::new(),
         }
     }
 
@@ -62,8 +71,12 @@ impl Engine {
         // Process commands for this tick
         for cmd in self.command_buffer.drain() {
             self.replay_hasher.hash_command(&cmd);
-            // Commands would be executed here in later milestones
+            cmd.apply(&mut self.world);
         }
+        
+        // Update physics
+        let dt = self.config.fixed_timestep.as_secs_f32();
+        self.world.update_all(dt);
         
         Ok(())
     }
@@ -73,12 +86,12 @@ impl Engine {
         self.time.tick_count
     }
 
-    /// Get replay hash
+    /// Get replay hash (combines command hash + final state hash)
     pub fn replay_hash(&self) -> String {
-        self.replay_hasher.finalize()
+        format!("{}:{}", self.replay_hasher.finalize(), self.world.state_hash())
     }
 
-    /// Queue a command
+    /// Queue a command for next tick
     pub fn queue_command(&mut self, cmd: commands::Command) {
         self.command_buffer.push(cmd);
     }
@@ -105,5 +118,36 @@ mod tests {
         
         engine.tick().unwrap();
         assert_eq!(engine.tick_count(), 2);
+    }
+
+    #[test]
+    fn deterministic_simulation() {
+        let config = EngineConfig {
+            seed: 42,
+            ..Default::default()
+        };
+        
+        let mut engine1 = Engine::new(config.clone());
+        let mut engine2 = Engine::new(config);
+        
+        // Run identical command sequence
+        for _ in 0..10 {
+            let x = engine1.rng.gen_f32() * 100.0;
+            let y = engine1.rng.gen_f32() * 100.0;
+            engine1.queue_command(commands::Command::SpawnEntity { x, y });
+        }
+        
+        // Reset RNG for engine2
+        engine2.rng = rng::GameRng::new(42);
+        for _ in 0..10 {
+            let x = engine2.rng.gen_f32() * 100.0;
+            let y = engine2.rng.gen_f32() * 100.0;
+            engine2.queue_command(commands::Command::SpawnEntity { x, y });
+        }
+        
+        engine1.tick().unwrap();
+        engine2.tick().unwrap();
+        
+        assert_eq!(engine1.replay_hash(), engine2.replay_hash());
     }
 }

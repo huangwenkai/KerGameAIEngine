@@ -49,7 +49,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M1: 时间循环 + 命令层 + 回放哈希
+### M1: 时间循环 + 命令层 + 回放哈希 ✓ COMPLETE (2026-09-23)
 **目标**: 建立确定性Command架构
 - 固定时间步循环 (60 TPS)
 - Command枚举 (所有游戏动作)
