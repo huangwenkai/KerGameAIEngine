@@ -124,7 +124,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M6: 沙/流体/反应
+### M6: 沙/流体/反应 🚧 IN PROGRESS
 **目标**: Noita风格物理
 - 落沙物理 (cellular automata)
 - 流体模拟 (水流扩散)

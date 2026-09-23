@@ -18,6 +18,7 @@ pub mod render;
 pub mod chunk;
 pub mod terrain;
 pub mod physics;
+pub mod automata;
 
 #[cfg(test)]
 mod replay_tests;
@@ -56,6 +57,7 @@ pub struct Engine {
     pub world: state::World,
     pub ecs: ecs::EcsWorld,
     pub chunk_world: chunk::ChunkWorld,
+    pub physics_sim: automata::PhysicsSimulator,
 }
 
 impl Engine {
@@ -73,6 +75,7 @@ impl Engine {
             world: state::World::new(),
             ecs: ecs::EcsWorld::new(),
             chunk_world: chunk::ChunkWorld::new(),
+            physics_sim: automata::PhysicsSimulator::new(10_000),
         }
     }
 
@@ -84,6 +87,13 @@ impl Engine {
         for cmd in self.command_buffer.drain() {
             self.replay_hasher.hash_command(&cmd);
             cmd.apply(&mut self.world, &mut self.chunk_world);
+            
+            // Wake cells affected by dig/place commands
+            if let commands::Command::DigCell { x, y } = cmd {
+                self.physics_sim.wake_cell(x, y);
+            } else if let commands::Command::PlaceCell { x, y, .. } = cmd {
+                self.physics_sim.wake_cell(x, y);
+            }
         }
         
         // Update old world physics (M1)
@@ -93,6 +103,9 @@ impl Engine {
         // Update ECS systems (M2)
         self.ecs.system_movement(dt);
         self.ecs.system_collision(1000.0); // World bounds: 1000x1000
+        
+        // Update cellular automata physics (M6)
+        self.physics_sim.update(&mut self.chunk_world);
         
         Ok(())
     }

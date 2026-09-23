@@ -664,6 +664,110 @@ impl Demo for M5Demo {
     }
 }
 
+/// M6 demo: Falling sand + fluid simulation
+pub struct M6Demo;
+
+impl Demo for M6Demo {
+    fn id(&self) -> &str {
+        "M6"
+    }
+
+    fn description(&self) -> &str {
+        "M6 cellular automata: falling sand + water flow + material reactions"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M6 demo: {}", self.description());
+        
+        // Generate base terrain
+        let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
+        log::info!("Generating terrain...");
+        for cy in -1..=1 {
+            for cx in -1..=1 {
+                terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
+            }
+        }
+        log::info!("Terrain generated: {} chunks", engine.chunk_world.chunk_count());
+        
+        // Phase 1: Drop sand pile (200 ticks)
+        log::info!("Phase 1: Drop 200 sand cells (200 ticks)");
+        let sand_x = 50;
+        let sand_y_start = -20;
+        
+        for tick in 0..200 {
+            engine.tick()?;
+            
+            // Drop sand from above
+            if tick % 2 == 0 {
+                let offset = (tick / 2) % 10 - 5;
+                engine.queue_command(crate::commands::Command::PlaceCell {
+                    x: sand_x + offset,
+                    y: sand_y_start,
+                    material: crate::chunk::Material::Sand,
+                });
+                engine.physics_sim.wake_cell(sand_x + offset, sand_y_start);
+            }
+        }
+        
+        log::info!("After phase 1: {} active cells", engine.physics_sim.active_cell_count());
+        
+        // Phase 2: Drop water (200 ticks)
+        log::info!("Phase 2: Drop 100 water cells (200 ticks)");
+        let water_x = 80;
+        let water_y_start = -20;
+        
+        for tick in 200..400 {
+            engine.tick()?;
+            
+            // Drop water from above
+            if tick % 4 == 0 {
+                let offset = (tick / 4) % 6 - 3;
+                engine.queue_command(crate::commands::Command::PlaceCell {
+                    x: water_x + offset,
+                    y: water_y_start,
+                    material: crate::chunk::Material::Water,
+                });
+                engine.physics_sim.wake_cell(water_x + offset, water_y_start);
+            }
+        }
+        
+        log::info!("After phase 2: {} active cells", engine.physics_sim.active_cell_count());
+        
+        // Phase 3: Let physics settle (200 ticks)
+        log::info!("Phase 3: Physics settle (200 ticks)");
+        for tick in 400..600 {
+            engine.tick()?;
+            
+            if tick % 50 == 0 {
+                log::info!("  Tick {}: {} active cells", tick, engine.physics_sim.active_cell_count());
+            }
+        }
+        
+        // Verify sand settled
+        let mut sand_count = 0;
+        let mut water_count = 0;
+        for y in 0..100 {
+            for x in 40..90 {
+                match engine.chunk_world.get_cell(x, y) {
+                    crate::chunk::Material::Sand => sand_count += 1,
+                    crate::chunk::Material::Water => water_count += 1,
+                    _ => {}
+                }
+            }
+        }
+        
+        log::info!("M6 demo completed: {} ticks", engine.tick_count());
+        log::info!("Sand cells settled: {}", sand_count);
+        log::info!("Water cells settled: {}", water_count);
+        log::info!("Final active cells: {}", engine.physics_sim.active_cell_count());
+        
+        assert!(sand_count > 50, "Should have settled sand (found {})", sand_count);
+        assert!(water_count > 10, "Should have settled water (found {})", water_count);
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -682,6 +786,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M3Demo));
         registry.demos.push(Box::new(M4Demo));
         registry.demos.push(Box::new(M5Demo));
+        registry.demos.push(Box::new(M6Demo));
         
         registry
     }
