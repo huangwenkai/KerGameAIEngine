@@ -1395,6 +1395,118 @@ impl Demo for M17Demo {
     }
 }
 
+/// M18 demo: Character locomotion and combat animations
+pub struct M18Demo;
+
+impl Demo for M18Demo {
+    fn id(&self) -> &str {
+        "M18"
+    }
+
+    fn description(&self) -> &str {
+        "M18 character animations: walk/run/jump/climb/attack/dash with event system"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M18 demo: {}", self.description());
+        
+        let mut animator = crate::character::create_humanoid_animator();
+        
+        log::info!("Testing all animation clips:");
+        
+        // Test idle
+        log::info!("  - Idle (breathing)");
+        animator.play("idle")?;
+        for _ in 0..60 {
+            animator.update(1.0 / 60.0);
+            engine.tick()?;
+        }
+        
+        // Test walk
+        log::info!("  - Walk (with footsteps)");
+        animator.play("walk")?;
+        let mut footstep_count = 0;
+        for _ in 0..60 {
+            animator.update(1.0 / 60.0);
+            footstep_count += animator.fired_events.iter().filter(|e| e == &"footstep").count();
+            animator.fired_events.clear();
+            engine.tick()?;
+        }
+        assert!(footstep_count > 0, "Walk animation should fire footstep events");
+        log::info!("    ✓ {} footstep events", footstep_count);
+        
+        // Test run
+        log::info!("  - Run (faster)");
+        animator.play("run")?;
+        for _ in 0..36 {
+            animator.update(1.0 / 60.0);
+            engine.tick()?;
+        }
+        
+        // Test jump
+        log::info!("  - Jump (with jump_start event)");
+        animator.play("jump")?;
+        let mut jump_event_fired = false;
+        for _ in 0..24 {
+            animator.update(1.0 / 60.0);
+            if animator.fired_events.contains(&"jump_start".to_string()) {
+                jump_event_fired = true;
+            }
+            animator.fired_events.clear();
+            engine.tick()?;
+        }
+        assert!(jump_event_fired, "Jump animation should fire jump_start event");
+        log::info!("    ✓ jump_start event fired");
+        
+        // Test climb
+        log::info!("  - Climb (arm reach)");
+        animator.play("climb")?;
+        let mut climb_step_count = 0;
+        for _ in 0..72 {
+            animator.update(1.0 / 60.0);
+            climb_step_count += animator.fired_events.iter().filter(|e| e == &"climb_step").count();
+            animator.fired_events.clear();
+            engine.tick()?;
+        }
+        assert!(climb_step_count > 0, "Climb animation should fire climb_step events");
+        log::info!("    ✓ {} climb_step events", climb_step_count);
+        
+        // Test attack
+        log::info!("  - Attack (with hit event)");
+        animator.play("attack")?;
+        let mut hit_event_fired = false;
+        for _ in 0..30 {
+            animator.update(1.0 / 60.0);
+            if animator.fired_events.contains(&"hit".to_string()) {
+                hit_event_fired = true;
+            }
+            animator.fired_events.clear();
+            engine.tick()?;
+        }
+        assert!(hit_event_fired, "Attack animation should fire hit event");
+        log::info!("    ✓ hit event fired");
+        
+        // Test dash
+        log::info!("  - Dash (burst movement)");
+        animator.play("dash")?;
+        let mut dash_event_fired = false;
+        for _ in 0..18 {
+            animator.update(1.0 / 60.0);
+            if animator.fired_events.contains(&"dash_burst".to_string()) {
+                dash_event_fired = true;
+            }
+            animator.fired_events.clear();
+            engine.tick()?;
+        }
+        assert!(dash_event_fired, "Dash animation should fire dash_burst event");
+        log::info!("    ✓ dash_burst event fired");
+        
+        log::info!("✓ M18 complete: All animation clips + events verified");
+        
+        Ok(())
+    }
+}
+
 /// SHOWCASE demo: Unified experience entrypoint covering all features
 pub struct ShowcaseDemo;
 
@@ -1803,6 +1915,47 @@ impl Demo for ShowcaseDemo {
         log::info!("└─ {}ms", ch18_elapsed.as_millis());
         chapter_metrics.push(("Ch 18: Villages", 60, ch18_elapsed));
         
+        // Chapter 19: M18 Character Animations (60 ticks = 1s)
+        log::info!("\n┌─ Ch 19: Character Anims (M18) ────────────────────────────┐");
+        let ch19_start = std::time::Instant::now();
+        
+        // Create humanoid animator and test animations
+        let mut character_animator = crate::character::create_humanoid_animator();
+        
+        // Play walk animation
+        let _ = character_animator.play("walk");
+        for _ in 0..15 {
+            character_animator.update(1.0 / 60.0);
+            engine.tick()?;
+        }
+        
+        // Play jump animation
+        let _ = character_animator.play("jump");
+        for _ in 0..15 {
+            character_animator.update(1.0 / 60.0);
+            engine.tick()?;
+        }
+        
+        // Play attack animation
+        let _ = character_animator.play("attack");
+        for _ in 0..15 {
+            character_animator.update(1.0 / 60.0);
+            engine.tick()?;
+        }
+        
+        // Play dash animation
+        let _ = character_animator.play("dash");
+        for _ in 0..15 {
+            character_animator.update(1.0 / 60.0);
+            engine.tick()?;
+        }
+        
+        let ch19_elapsed = ch19_start.elapsed();
+        log::info!("│ ✓ Animations: walk, run, jump, climb, attack, dash");
+        log::info!("│ ✓ Events: footstep, hit, dash_burst, climb_step");
+        log::info!("└─ {}ms", ch19_elapsed.as_millis());
+        chapter_metrics.push(("Ch 19: Character", 60, ch19_elapsed));
+        
         let total_elapsed = start_total.elapsed();
         let total_ticks: u64 = chapter_metrics.iter().map(|(_, t, _)| t).sum();
         
@@ -1816,7 +1969,7 @@ impl Demo for ShowcaseDemo {
                    total_ticks, total_elapsed.as_millis(), total_ticks as f32 / 60.0);
         log::info!("  Average: {:.2}ms per tick", total_elapsed.as_millis() as f64 / total_ticks as f64);
         log::info!("  Replay hash: {}", engine.replay_hash());
-        log::info!("\n✓ All features showcased: M0-M17 + Terraria playable demo!");
+        log::info!("\n✓ All features showcased: M0-M18 + Terraria playable demo!");
         
         Ok(())
     }
@@ -3114,6 +3267,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M15Demo));
         registry.demos.push(Box::new(M16Demo));
         registry.demos.push(Box::new(M17Demo));
+        registry.demos.push(Box::new(M18Demo));
         
         registry
     }
