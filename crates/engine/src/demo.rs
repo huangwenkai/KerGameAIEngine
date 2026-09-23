@@ -2447,20 +2447,33 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
                                 a: 1.0,
                             });
                             
-                            // Collect quads
+                            // Collect quads with viewport culling
                             let mut quads = Vec::new();
                             let screen_width = renderer.config.width as f32;
                             let screen_height = renderer.config.height as f32;
                             let cell_size = 8.0;
                             
+                            // Camera is in cell-space, calculate visible cell range
                             let view_x = state.camera_x - screen_width / (2.0 * cell_size);
                             let view_y = state.camera_y - screen_height / (2.0 * cell_size);
                             let view_w = screen_width / cell_size;
                             let view_h = screen_height / cell_size;
                             
+                            // Only render cells actually visible on screen (+ 1 cell margin)
+                            let min_cx = view_x as i32 - 1;
+                            let max_cx = (view_x + view_w) as i32 + 1;
+                            let min_cy = view_y as i32 - 1;
+                            let max_cy = (view_y + view_h) as i32 + 1;
+                            
+                            // Safety: cap to reasonable viewport size to prevent crash
+                            let visible_cells = ((max_cx - min_cx) * (max_cy - min_cy)) as usize;
+                            if visible_cells > 50000 {
+                                log::warn!("Viewport too large ({} cells), capping render", visible_cells);
+                            }
+                            
                             // Terrain cells
-                            for cy in (view_y as i32 - 1)..(view_y + view_h) as i32 + 1 {
-                                for cx in (view_x as i32 - 1)..(view_x + view_w) as i32 + 1 {
+                            for cy in min_cy..max_cy {
+                                for cx in min_cx..max_cx {
                                     let material = engine.chunk_world.get_cell(cx, cy);
                                     let color = match material {
                                         crate::chunk::Material::Dirt => [0.6, 0.4, 0.2, 1.0],

@@ -91,9 +91,11 @@ impl WindowedRenderContext {
         });
         
         // Create vertex buffer (will be filled per-frame)
+        // Each quad = 6 vertices * 24 bytes = 144 bytes
+        // 4MB allows ~28,400 quads (far more than typical viewport needs)
         let quad_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Quad Vertex Buffer"),
-            size: 1024 * 1024, // 1MB buffer for many quads
+            size: 4 * 1024 * 1024, // 4MB buffer for many quads
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -135,56 +137,71 @@ impl WindowedRenderContext {
         Ok((encoder, view, frame))
     }
     
-    /// Draw multiple colored quads in a batch
+    /// Draw multiple colored quads in a batch (with buffer overflow protection)
     pub fn draw_quads(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, quads: &[QuadInstance]) {
         if quads.is_empty() {
             return;
         }
         
-        // Convert quads to vertex data (6 vertices per quad)
-        let mut vertices = Vec::with_capacity(quads.len() * 6);
-        for quad in quads {
-            // Convert screen space (0..width, 0..height) to NDC (-1..1, -1..1)
-            let x1 = (quad.x / self.config.width as f32) * 2.0 - 1.0;
-            let y1 = -((quad.y / self.config.height as f32) * 2.0 - 1.0); // Flip Y
-            let x2 = ((quad.x + quad.width) / self.config.width as f32) * 2.0 - 1.0;
-            let y2 = -(((quad.y + quad.height) / self.config.height as f32) * 2.0 - 1.0);
+        // Batch size limit: prevent buffer overrun
+        // Buffer is 4MB, each vertex is 24 bytes, each quad is 6 vertices = 144 bytes
+        const MAX_QUADS_PER_BATCH: usize = 28_000; // ~4MB / 144 bytes
+        
+        for batch_start in (0..quads.len()).step_by(MAX_QUADS_PER_BATCH) {
+            let batch_end = (batch_start + MAX_QUADS_PER_BATCH).min(quads.len());
+            let batch = &quads[batch_start..batch_end];
             
-            // Two triangles forming a quad
-            vertices.extend_from_slice(&[
-                x1, y1, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
-                x2, y1, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
-                x1, y2, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
+            // Convert quads to vertex data (6 vertices per quad)
+            let mut vertices = Vec::with_capacity(batch.len() * 6);
+            for quad in batch {
+                // Convert screen space (0..width, 0..height) to NDC (-1..1, -1..1)
+                let x1 = (quad.x / self.config.width as f32) * 2.0 - 1.0;
+                let y1 = -((quad.y / self.config.height as f32) * 2.0 - 1.0); // Flip Y
+                let x2 = ((quad.x + quad.width) / self.config.width as f32) * 2.0 - 1.0;
+                let y2 = -(((quad.y + quad.height) / self.config.height as f32) * 2.0 - 1.0);
                 
-                x1, y2, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
-                x2, y1, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
-                x2, y2, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
-            ]);
+                // Two triangles forming a quad
+                vertices.extend_from_slice(&[
+                    x1, y1, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
+                    x2, y1, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
+                    x1, y2, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
+                    
+                    x1, y2, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
+                    x2, y1, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
+                    x2, y2, quad.color[0], quad.color[1], quad.color[2], quad.color[3],
+                ]);
+            }
+            
+            // Upload vertex data
+            let vertex_data: &[u8] = bytemuck::cast_slice(&vertices);
+            if vertex_data.len() > self.quad_vertex_buffer.size() as usize {
+                log::warn!("Batch too large ({} bytes), truncating to buffer size", vertex_data.len());
+                let truncated = &vertex_data[..self.quad_vertex_buffer.size() as usize];
+                self.queue.write_buffer(&self.quad_vertex_buffer, 0, truncated);
+            } else {
+                self.queue.write_buffer(&self.quad_vertex_buffer, 0, vertex_data);
+            }
+            
+            // Draw this batch
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Quad Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: if batch_start == 0 { wgpu::LoadOp::Load } else { wgpu::LoadOp::Load },
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            
+            render_pass.set_pipeline(&self.quad_pipeline);
+            render_pass.set_vertex_buffer(0, self.quad_vertex_buffer.slice(..));
+            render_pass.draw(0..(batch.len() * 6) as u32, 0..1);
         }
-        
-        // Upload vertex data
-        let vertex_data: &[u8] = bytemuck::cast_slice(&vertices);
-        self.queue.write_buffer(&self.quad_vertex_buffer, 0, vertex_data);
-        
-        // Draw
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Quad Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load, // Don't clear, we want to draw on top
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-        
-        render_pass.set_pipeline(&self.quad_pipeline);
-        render_pass.set_vertex_buffer(0, self.quad_vertex_buffer.slice(..));
-        render_pass.draw(0..(quads.len() * 6) as u32, 0..1);
     }
     
     /// Clear screen
