@@ -1956,7 +1956,7 @@ impl Demo for M21Demo {
     }
 }
 
-fn count_cells(world: &crate::chunk::ChunkWorld) -> (usize, usize, usize, usize) {
+fn count_cells(world: &mut crate::chunk::ChunkWorld) -> (usize, usize, usize, usize) {
     let mut air = 0;
     let mut dirt = 0;
     let mut stone = 0;
