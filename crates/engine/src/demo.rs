@@ -2356,6 +2356,34 @@ fn run_terraria_windowed(engine: &mut Engine) -> Result<()> {
         }
     }
     
+    // Find safe spawn position (air above solid ground near origin)
+    let find_spawn_position = |world: &mut crate::chunk::ChunkWorld| -> (f32, f32) {
+        for spawn_x in 0..20 {
+            // Scan downward from y=-10 to find ground
+            for test_y in -10..40 {
+                let material = world.get_cell(spawn_x, test_y);
+                if material.is_solid() {
+                    // Found ground, check if air above
+                    let above1 = world.get_cell(spawn_x, test_y - 1);
+                    let above2 = world.get_cell(spawn_x, test_y - 2);
+                    let above3 = world.get_cell(spawn_x, test_y - 3);
+                    if !above1.is_solid() && !above2.is_solid() && !above3.is_solid() {
+                        // Safe spawn: convert cell coords to physics pixels (4px per cell)
+                        // Place player centered on cell, standing on ground
+                        let spawn_x_px = (spawn_x as f32 + 0.5) * 4.0;
+                        let spawn_y_px = (test_y as f32 - 6.0) * 4.0; // 6 cells up (player is 6 cells tall)
+                        return (spawn_x_px, spawn_y_px);
+                    }
+                }
+            }
+        }
+        // Fallback if no safe spawn found
+        (64.0, -50.0)
+    };
+    
+    let (spawn_x, spawn_y) = find_spawn_position(&mut engine.chunk_world);
+    log::info!("Player spawn: ({:.1}, {:.1})", spawn_x, spawn_y);
+    
     // Setup game state
     let mut rng = crate::rng::GameRng::new(engine.config.seed);
     // Find surface near origin: world cells are 4px; spawn in pixels on top of ground
