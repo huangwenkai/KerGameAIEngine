@@ -1507,6 +1507,89 @@ impl Demo for M18Demo {
     }
 }
 
+/// M19 demo: NPC needs simulator foundation
+pub struct M19Demo;
+
+impl Demo for M19Demo {
+    fn id(&self) -> &str {
+        "M19"
+    }
+
+    fn description(&self) -> &str {
+        "M19 NPC needs: thirst/hunger/sleep utility AI foundation"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M19 demo: {}", self.description());
+        
+        // Create 10 NPCs with needs
+        let mut npcs = Vec::new();
+        for i in 0..10 {
+            npcs.push((
+                format!("NPC_{}", i),
+                crate::needs::Needs::new(),
+                crate::needs::GoalSelector::new(),
+            ));
+        }
+        
+        log::info!("Created {} NPCs with needs systems", npcs.len());
+        
+        // Simulate 300 seconds (18000 ticks @ 60 TPS), sampling every 60 ticks
+        log::info!("Simulating 300s of NPC needs decay...");
+        
+        let mut goal_transitions = 0;
+        let mut critical_needs_count = 0;
+        
+        for tick in 0..18_000 {
+            let dt = 1.0 / 60.0;
+            
+            // Update all NPC needs
+            for (name, needs, selector) in &mut npcs {
+                let old_goal = selector.select_goal(needs);
+                needs.update(dt);
+                let new_goal = selector.select_goal(needs);
+                
+                if old_goal != new_goal {
+                    goal_transitions += 1;
+                    if tick % 600 == 0 {
+                        log::info!("  {} goal: {:?} → {:?} (thirst={:.2}, hunger={:.2}, sleep={:.2})",
+                                   name, old_goal, new_goal, 
+                                   needs.thirst.value, needs.hunger.value, needs.sleep.value);
+                    }
+                }
+                
+                if needs.has_critical_need() {
+                    critical_needs_count += 1;
+                }
+            }
+            
+            engine.tick()?;
+            
+            // Sample state every 10s
+            if tick % 600 == 0 && tick > 0 {
+                let avg_thirst: f32 = npcs.iter().map(|(_, n, _)| n.thirst.value).sum::<f32>() / npcs.len() as f32;
+                let avg_hunger: f32 = npcs.iter().map(|(_, n, _)| n.hunger.value).sum::<f32>() / npcs.len() as f32;
+                let avg_sleep: f32 = npcs.iter().map(|(_, n, _)| n.sleep.value).sum::<f32>() / npcs.len() as f32;
+                
+                log::info!("  t={:3}s: avg needs → thirst={:.2}, hunger={:.2}, sleep={:.2}",
+                           tick / 60, avg_thirst, avg_hunger, avg_sleep);
+            }
+        }
+        
+        log::info!("✓ M19 complete:");
+        log::info!("  - Goal transitions: {}", goal_transitions);
+        log::info!("  - Critical need events: {}", critical_needs_count);
+        log::info!("  - NPCs with needs: {}", npcs.len());
+        
+        // Verify needs increased over time
+        let final_avg_thirst: f32 = npcs.iter().map(|(_, n, _)| n.thirst.value).sum::<f32>() / npcs.len() as f32;
+        assert!(final_avg_thirst > 0.5, "Needs should accumulate over time");
+        assert!(goal_transitions > 0, "NPCs should change goals based on needs");
+        
+        Ok(())
+    }
+}
+
 /// SHOWCASE demo: Unified experience entrypoint covering all features
 pub struct ShowcaseDemo;
 
@@ -3268,6 +3351,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M16Demo));
         registry.demos.push(Box::new(M17Demo));
         registry.demos.push(Box::new(M18Demo));
+        registry.demos.push(Box::new(M19Demo));
         
         registry
     }

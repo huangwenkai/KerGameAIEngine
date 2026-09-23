@@ -31,6 +31,7 @@ pub mod save;
 pub mod animation;
 pub mod character;
 pub mod structures;
+pub mod needs;
 
 #[cfg(test)]
 mod replay_tests;
