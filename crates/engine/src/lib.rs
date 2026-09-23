@@ -14,6 +14,7 @@ pub mod report;
 pub mod rng;
 pub mod state;
 pub mod ecs;
+pub mod render;
 
 #[cfg(test)]
 mod replay_tests;

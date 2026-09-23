@@ -20,3 +20,4 @@ serde_json = { workspace = true }
 glam = { workspace = true }
 sha2 = { workspace = true }
 hecs = { workspace = true }
+image = { workspace = true }

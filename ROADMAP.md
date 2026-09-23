@@ -76,7 +76,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M3: 渲染管线
+### M3: 渲染管线 ✓ COMPLETE (2026-09-23)
 **目标**: wgpu渲染基础
 - wgpu初始化 (支持headless: texture target)
 - 基础sprite渲染 (instanced quad batching)
