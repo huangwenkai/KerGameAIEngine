@@ -109,6 +109,91 @@ impl Default for Needs {
     }
 }
 
+/// World target for goal execution
+#[derive(Debug, Clone)]
+pub struct Target {
+    pub x: i32,
+    pub y: i32,
+    pub goal: GoalType,
+}
+
+/// NPC agent with needs, goals, and position
+#[derive(Debug, Clone)]
+pub struct NpcAgent {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub needs: Needs,
+    pub current_goal: GoalType,
+    pub target: Option<Target>,
+}
+
+impl NpcAgent {
+    pub fn new(name: String, x: f32, y: f32) -> Self {
+        Self {
+            name,
+            x,
+            y,
+            needs: Needs::new(),
+            current_goal: GoalType::Idle,
+            target: None,
+        }
+    }
+    
+    /// Update agent: needs decay, goal selection, movement
+    pub fn update(&mut self, dt: f32, selector: &GoalSelector) {
+        self.needs.update(dt);
+        
+        let new_goal = selector.select_goal(&self.needs);
+        if new_goal != self.current_goal {
+            self.current_goal = new_goal;
+            self.target = None; // Clear target on goal change
+        }
+    }
+    
+    /// Move toward target (simple linear movement)
+    pub fn move_toward(&mut self, target_x: i32, target_y: i32, speed: f32, dt: f32) {
+        let dx = target_x as f32 - self.x;
+        let dy = target_y as f32 - self.y;
+        let dist = (dx * dx + dy * dy).sqrt();
+        
+        if dist > 0.1 {
+            let step = speed * dt;
+            self.x += (dx / dist) * step;
+            self.y += (dy / dist) * step;
+        }
+    }
+    
+    /// Check if agent reached target (within 2 cells)
+    pub fn reached_target(&self, target_x: i32, target_y: i32) -> bool {
+        let dx = target_x as f32 - self.x;
+        let dy = target_y as f32 - self.y;
+        (dx * dx + dy * dy).sqrt() < 2.0
+    }
+    
+    /// Execute action at target
+    pub fn execute_action(&mut self, action: GoalType) -> bool {
+        match action {
+            GoalType::FindWater => {
+                // Drink: restore thirst
+                self.needs.thirst.satisfy(0.5);
+                true
+            }
+            GoalType::FindFood => {
+                // Eat: restore hunger
+                self.needs.hunger.satisfy(0.4);
+                true
+            }
+            GoalType::FindBed => {
+                // Sleep: restore sleep need
+                self.needs.sleep.satisfy(0.3);
+                true
+            }
+            GoalType::Idle => false,
+        }
+    }
+}
+
 /// Goal type driven by needs
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GoalType {
@@ -226,5 +311,36 @@ mod tests {
         needs.thirst.value = 0.3;
         needs.hunger.value = 0.6;
         assert_eq!(selector.select_goal(&needs), GoalType::FindFood);
+    }
+    
+    #[test]
+    fn npc_agent_movement() {
+        let mut agent = NpcAgent::new("TestNPC".to_string(), 0.0, 0.0);
+        
+        // Move toward (10, 10)
+        agent.move_toward(10, 10, 5.0, 1.0); // 5 units/s for 1s
+        
+        let dist = ((agent.x - 10.0).powi(2) + (agent.y - 10.0).powi(2)).sqrt();
+        assert!(dist < 10.0, "Agent should move toward target");
+        
+        // Reach target
+        agent.x = 9.5;
+        agent.y = 9.5;
+        assert!(agent.reached_target(10, 10));
+    }
+    
+    #[test]
+    fn npc_agent_actions() {
+        let mut agent = NpcAgent::new("TestNPC".to_string(), 0.0, 0.0);
+        agent.needs.thirst.value = 0.8;
+        agent.needs.hunger.value = 0.7;
+        
+        // Drink (satisfies 0.5)
+        agent.execute_action(GoalType::FindWater);
+        assert!((agent.needs.thirst.value - 0.3).abs() < 0.01);
+        
+        // Eat (satisfies 0.4)
+        agent.execute_action(GoalType::FindFood);
+        assert!((agent.needs.hunger.value - 0.3).abs() < 0.01);
     }
 }
