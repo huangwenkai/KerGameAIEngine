@@ -1645,16 +1645,13 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M6Demo));
         registry.demos.push(Box::new(M7Demo));
         registry.demos.push(Box::new(M8Demo));
-<<<<<<< HEAD
         registry.demos.push(Box::new(M9Demo));
         registry.demos.push(Box::new(M10Demo));
         registry.demos.push(Box::new(M11Demo));
         registry.demos.push(Box::new(M12Demo));
         registry.demos.push(Box::new(M13Demo));
         registry.demos.push(Box::new(M14Demo));
-=======
         registry.demos.push(Box::new(M15Demo));
->>>>>>> d5eb102 ([M15] Implement 2D skeletal animation system)
         
         registry
     }
