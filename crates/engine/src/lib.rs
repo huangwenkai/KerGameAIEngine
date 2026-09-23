@@ -33,6 +33,8 @@ pub mod character;
 pub mod structures;
 pub mod needs;
 pub mod enemy_ai;
+pub mod day_night;
+pub mod biome_spread;
 
 #[cfg(test)]
 mod replay_tests;
