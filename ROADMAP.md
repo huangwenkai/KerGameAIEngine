@@ -316,7 +316,7 @@ SHOWCASE complements milestone demos:
 
 ## 世界与生成 / World & Generation
 
-### M16: 丰富世界生成 ⏳ IN PROGRESS
+### M16: 丰富世界生成 ✓ COMPLETE (2026-09-23)
 **目标**: 替换简单噪声地形，实现分层生成器
 - 地形特征:
   - 洞穴 (worm算法 + cellular automata)

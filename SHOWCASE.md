@@ -188,9 +188,25 @@ cargo run --bin engine -- run-demo TERRARIA --headless --seed 42 --report terrar
 
 The TERRARIA demo validates that KerGameAIEngine can support a real game loop, not just isolated tech demos.
 
+### Chapter 17: Rich World Generation (M16)
+**Duration**: 120 ticks (~2 seconds)
+
+Demonstrates:
+- **Biome system** with 5 types (Grassland, Desert, Jungle, Swamp, Mountain)
+- **Cave generation** using worm algorithm + cellular automata
+- **Ore veins** (Copper, Iron, Gold, Magic Crystals) with depth-based spawning
+- **Underground lakes** at varying depths
+- **Biome-specific terrain** (surface materials, height offsets)
+- All procedurally generated from seed (deterministic)
+
+Features visible in windowed TERRARIA:
+- Different colored terrain based on biome (sand yellow in deserts, grass green in grasslands)
+- Natural cave systems for exploration
+- Varied surface heights (mountains tall, swamps low)
+
 ## Total Duration
 
-**~1,980 ticks (~33 seconds of simulation)**
+**~2,040 ticks (~34 seconds of simulation)**
 
 Average performance target: <1ms per tick for smooth 60 FPS capability.
 
