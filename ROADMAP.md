@@ -164,7 +164,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M9: 战斗/掉落
+### M9: 战斗/掉落 ✓ COMPLETE (2026-09-23)
 **目标**: Diablo风格战斗
 - Combat系统 (伤害计算，暴击，元素伤害)
 - 敌人AI (追逐，攻击)
@@ -177,7 +177,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M10: 魔法组合
+### M10: 魔法组合 ✓ COMPLETE (2026-09-23)
 **目标**: Noita风格法术编辑
 - Spell组件系统 (投射物+修饰符+触发器)
 - SpellCaster
@@ -189,7 +189,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M11: NPC系统
+### M11: NPC系统 ✓ COMPLETE (2026-09-23)
 **目标**: 任务/对话
 - NPC定义
 - 对话树
@@ -202,7 +202,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M12: 剧情/事件
+### M12: 剧情/事件 ✓ COMPLETE (2026-09-23)
 **目标**: 动态叙事
 - 事件触发器
 - 剧情节点
@@ -215,7 +215,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M13: 音频/UI
+### M13: 音频/UI ✓ COMPLETE (2026-09-23)
 **目标**: 完善交互
 - 音效播放 (rodio)
 - UI框架 (egui)
@@ -238,6 +238,26 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 **验收**: 
 - 存档往返一致
 - 发布包可运行
+
+---
+
+### M15: 2D骨骼动画系统 ✓ COMPLETE (2026-09-23)
+**目标**: Action game feel (Terraria×Noita×Diablo)
+- 骨骼层级 (parent index, local/world transforms)
+- 关键帧动画 (位置/旋转/缩放插值)
+- Slot/Attachment (精灵绑定到骨骼)
+- 动画状态机 (play/loop, crossfade基础)
+- 事件轨道 (hit, can_cancel等战斗钩子)
+- 确定性采样 (fixed timestep驱动)
+- JSON格式 (docs/skeleton_format.md)
+- M15 Demo: Humanoid骨骼 (5 bones), idle/attack clips, 600 ticks
+
+**验收**:
+- 层级变换正确计算
+- 关键帧插值平滑
+- 事件在正确时间触发
+- Headless运行成功
+- 测试覆盖bind pose, 父子变换, 采样
 
 ---
 

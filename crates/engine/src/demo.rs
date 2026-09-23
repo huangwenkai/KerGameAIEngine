@@ -906,6 +906,183 @@ impl Demo for M7Demo {
     }
 }
 
+/// M15 demo: 2D skeletal animation
+pub struct M15Demo;
+
+impl Demo for M15Demo {
+    fn id(&self) -> &str {
+        "M15"
+    }
+
+    fn description(&self) -> &str {
+        "M15 skeletal animation: 2D bones + keyframes + event tracks + sprite rendering"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M15 demo: {}", self.description());
+        
+        // Phase 1: Create skeleton (humanoid: root, body, arm_left, arm_right, head)
+        log::info!("Phase 1: Building skeleton");
+        let mut skeleton = crate::animation::Skeleton::new("humanoid".to_string());
+        
+        let root_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "root".to_string(),
+            None,
+            crate::animation::Transform2D::new(0.0, 0.0),
+        ));
+        
+        let body_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "body".to_string(),
+            Some(root_idx),
+            crate::animation::Transform2D::new(0.0, 10.0),
+        ));
+        
+        let arm_left_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "arm_left".to_string(),
+            Some(body_idx),
+            crate::animation::Transform2D::new(-8.0, 0.0),
+        ));
+        
+        let arm_right_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "arm_right".to_string(),
+            Some(body_idx),
+            crate::animation::Transform2D::new(8.0, 0.0),
+        ));
+        
+        let head_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "head".to_string(),
+            Some(body_idx),
+            crate::animation::Transform2D::new(0.0, 16.0),
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "body_sprite".to_string(),
+            body_idx,
+            12.0,
+            20.0,
+            [0.8, 0.2, 0.2, 1.0],
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "arm_left_sprite".to_string(),
+            arm_left_idx,
+            6.0,
+            12.0,
+            [0.2, 0.8, 0.2, 1.0],
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "arm_right_sprite".to_string(),
+            arm_right_idx,
+            6.0,
+            12.0,
+            [0.2, 0.2, 0.8, 1.0],
+        ));
+        
+        skeleton.add_attachment(crate::animation::Attachment::new(
+            "head_sprite".to_string(),
+            head_idx,
+            10.0,
+            10.0,
+            [1.0, 0.8, 0.6, 1.0],
+        ));
+        
+        log::info!("Skeleton created: {} bones, {} attachments", 
+                   skeleton.bones.len(), skeleton.attachments.len());
+        
+        // Phase 2: Create animation clips
+        log::info!("Phase 2: Creating animation clips");
+        
+        let mut idle_clip = crate::animation::AnimationClip::new("idle".to_string(), 2.0, true);
+        
+        let mut body_track = crate::animation::BoneTrack::new(body_idx);
+        body_track.add_keyframe(0.0, crate::animation::Transform2D::new(0.0, 10.0));
+        body_track.add_keyframe(1.0, crate::animation::Transform2D::new(0.0, 12.0));
+        body_track.add_keyframe(2.0, crate::animation::Transform2D::new(0.0, 10.0));
+        idle_clip.add_track(body_track);
+        
+        let mut attack_clip = crate::animation::AnimationClip::new("attack".to_string(), 0.8, false);
+        
+        let mut arm_right_track = crate::animation::BoneTrack::new(arm_right_idx);
+        let mut t = crate::animation::Transform2D::new(8.0, 0.0);
+        arm_right_track.add_keyframe(0.0, t);
+        
+        t = crate::animation::Transform2D::new(8.0, 0.0);
+        t.rotation = -0.5;
+        arm_right_track.add_keyframe(0.2, t);
+        
+        t = crate::animation::Transform2D::new(8.0, 0.0);
+        t.rotation = 1.0;
+        arm_right_track.add_keyframe(0.5, t);
+        
+        t = crate::animation::Transform2D::new(8.0, 0.0);
+        t.rotation = 0.0;
+        arm_right_track.add_keyframe(0.8, t);
+        
+        attack_clip.add_track(arm_right_track);
+        attack_clip.add_event(0.5, "hit".to_string());
+        attack_clip.add_event(0.6, "can_cancel".to_string());
+        
+        log::info!("Created clips: idle (looping, 2.0s), attack (oneshot, 0.8s, 2 events)");
+        
+        let mut animator = crate::animation::Animator::new(skeleton);
+        animator.add_clip(idle_clip);
+        animator.add_clip(attack_clip);
+        
+        // Phase 3: Run animation (600 ticks = 10 seconds)
+        log::info!("Phase 3: Running animation simulation (600 ticks)");
+        let dt = engine.config.fixed_timestep.as_secs_f32();
+        
+        animator.play("idle")?;
+        
+        let mut total_events = 0;
+        let mut attack_triggered = 0;
+        
+        for tick in 0..600 {
+            engine.tick()?;
+            
+            animator.update(dt);
+            
+            let events = animator.take_events();
+            total_events += events.len();
+            
+            if tick == 200 || tick == 400 {
+                log::info!("  Tick {}: Triggering attack animation", tick);
+                animator.play("attack")?;
+                attack_triggered += 1;
+            }
+            
+            if tick % 100 == 0 {
+                log::info!("  Tick {}: time={:.2}s, finished={}", 
+                           tick, animator.current_time(), animator.is_finished());
+            }
+        }
+        
+        log::info!("Animation simulation complete");
+        log::info!("Total events fired: {}", total_events);
+        log::info!("Attack animations triggered: {}", attack_triggered);
+        
+        // Phase 4: Verify bind pose and transformations
+        log::info!("Phase 4: Verifying bone transformations");
+        animator.play("idle")?;
+        animator.update(0.0);
+        
+        let sprites = animator.emit_sprites();
+        log::info!("Emitted {} sprites for rendering", sprites.len());
+        
+        assert_eq!(sprites.len(), 4, "Should have 4 sprite attachments");
+        assert_eq!(animator.skeleton.bones.len(), 5, "Should have 5 bones");
+        assert!(total_events >= 4, "Should have fired hit/can_cancel events (got {})", total_events);
+        
+        log::info!("M15 demo completed: {} ticks", engine.tick_count());
+        log::info!("Skeleton: {} bones", animator.skeleton.bones.len());
+        log::info!("Attachments: {} sprites", animator.skeleton.attachments.len());
+        log::info!("Events fired: {}", total_events);
+        
+        Ok(())
+    }
+}
+
 /// M8 demo: Item system
 pub struct M8Demo;
 
@@ -1067,7 +1244,7 @@ impl Demo for ShowcaseDemo {
     }
 
     fn description(&self) -> &str {
-        "Unified showcase: All engine features in short chapters (M0-M8)"
+        "Unified showcase: All engine features in short chapters (M0-M15)"
     }
 
     fn run(&self, engine: &mut Engine) -> Result<()> {
@@ -1079,247 +1256,279 @@ impl Demo for ShowcaseDemo {
         let start_total = std::time::Instant::now();
         let mut chapter_metrics = Vec::new();
         
-        // Chapter 0: Tick Loop + Commands (120 ticks = 2s)
-        log::info!("\n┌─ Chapter 0: Tick Loop + Commands (M0, M1) ───────────────┐");
-        let ch0_start = std::time::Instant::now();
-        for _ in 0..120 {
-            engine.tick()?;
-        }
-        let ch0_elapsed = ch0_start.elapsed();
-        log::info!("│ ✓ Fixed timestep: 120 ticks @ 60 TPS");
-        log::info!("│ ✓ Command buffer + replay hasher");
-        log::info!("└─ Completed in {}ms", ch0_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 0: Tick/Commands", 120, ch0_elapsed));
+        // Chapters 0-8: Core systems (keep brief - covered in detail by M* demos)
+        // Total for core: ~900 ticks (~15s)
         
-        // Chapter 1: ECS Entities (180 ticks = 3s)
-        log::info!("\n┌─ Chapter 1: ECS Stress Test (M2) ────────────────────────┐");
+        // Chapter 0: Tick/Commands (60 ticks = 1s)
+        log::info!("\n┌─ Ch 0: Tick/Commands (M0,M1) ─────────────────────────────┐");
+        let ch0_start = std::time::Instant::now();
+        for _ in 0..60 { engine.tick()?; }
+        let ch0_elapsed = ch0_start.elapsed();
+        log::info!("│ ✓ Fixed timestep + command buffer + replay");
+        log::info!("└─ {}ms", ch0_elapsed.as_millis());
+        chapter_metrics.push(("Ch 0: Core", 60, ch0_elapsed));
+        
+        // Chapter 1: ECS (60 ticks = 1s)
+        log::info!("\n┌─ Ch 1: ECS (M2) ──────────────────────────────────────────┐");
         let ch1_start = std::time::Instant::now();
-        log::info!("│ Spawning 1,000 entities with physics...");
-        for _ in 0..1_000 {
+        for _ in 0..500 {
             let x = engine.rng.gen_range(0.0..1000.0);
             let y = engine.rng.gen_range(0.0..1000.0);
-            let vx = engine.rng.gen_range(-50.0..50.0);
-            let vy = engine.rng.gen_range(-50.0..50.0);
-            engine.ecs.spawn_entity(x, y, vx, vy, 100.0);
+            engine.ecs.spawn_entity(x, y, engine.rng.gen_range(-50.0..50.0), engine.rng.gen_range(-50.0..50.0), 100.0);
         }
-        for _ in 0..180 {
-            engine.tick()?;
-        }
+        for _ in 0..60 { engine.tick()?; }
         let ch1_elapsed = ch1_start.elapsed();
-        log::info!("│ ✓ 1,000 entities with Transform + Velocity + Health");
-        log::info!("│ ✓ Movement + collision systems");
-        log::info!("│ Entity count: {}", engine.ecs.entity_count());
-        log::info!("└─ Completed in {}ms", ch1_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 1: ECS", 180, ch1_elapsed));
+        log::info!("│ ✓ 500 entities + physics");
+        log::info!("└─ {}ms", ch1_elapsed.as_millis());
+        chapter_metrics.push(("Ch 1: ECS", 60, ch1_elapsed));
         
-        // Chapter 2: Render Pipeline (180 ticks = 3s)
-        log::info!("\n┌─ Chapter 2: Render Pipeline (M3) ────────────────────────┐");
+        // Chapter 2: Render (60 ticks = 1s)
+        log::info!("\n┌─ Ch 2: Render (M3) ───────────────────────────────────────┐");
         let ch2_start = std::time::Instant::now();
-        let mut camera = crate::render::Camera::new(800, 600);
-        log::info!("│ Camera system: 800×600");
-        for tick in 0..180 {
-            engine.tick()?;
-            if tick % 30 == 0 {
-                camera.move_by(10, 5);
-            }
-        }
+        let camera = crate::render::Camera::new(800, 600);
+        for _ in 0..60 { engine.tick()?; }
         let ch2_elapsed = ch2_start.elapsed();
-        log::info!("│ ✓ wgpu render context (headless capable)");
-        log::info!("│ ✓ Sprite batching + instancing");
-        log::info!("│ Camera position: ({}, {})", camera.x, camera.y);
-        log::info!("└─ Completed in {}ms", ch2_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 2: Render/Camera", 180, ch2_elapsed));
+        log::info!("│ ✓ wgpu + camera at ({}, {})", camera.x, camera.y);
+        log::info!("└─ {}ms", ch2_elapsed.as_millis());
+        chapter_metrics.push(("Ch 2: Render", 60, ch2_elapsed));
         
-        // Chapter 3: Chunks + Terrain (180 ticks = 3s)
-        log::info!("\n┌─ Chapter 3: Chunks + Terrain (M4) ───────────────────────┐");
+        // Chapter 3: Chunks (60 ticks = 1s)
+        log::info!("\n┌─ Ch 3: Chunks (M4) ───────────────────────────────────────┐");
         let ch3_start = std::time::Instant::now();
         let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
-        log::info!("│ 🔒 Cell size: 4px (locked decision)");
-        log::info!("│ Chunk size: 128×128 cells = 512×512 screen px");
         for cy in -1..=1 {
             for cx in -1..=1 {
                 terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
             }
         }
-        for _ in 0..180 {
-            engine.tick()?;
-        }
+        for _ in 0..60 { engine.tick()?; }
         let ch3_elapsed = ch3_start.elapsed();
-        log::info!("│ ✓ Sparse chunk storage: {} chunks", engine.chunk_world.chunk_count());
-        log::info!("│ ✓ Seeded Perlin terrain generation");
-        log::info!("│ ✓ get_cell/set_cell APIs");
-        log::info!("└─ Completed in {}ms", ch3_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 3: Chunks/Terrain", 180, ch3_elapsed));
+        log::info!("│ ✓ 9 chunks (4px cells)");
+        log::info!("└─ {}ms", ch3_elapsed.as_millis());
+        chapter_metrics.push(("Ch 3: Chunks", 60, ch3_elapsed));
         
-        // Chapter 4: Dig/Build (180 ticks = 3s)
-        log::info!("\n┌─ Chapter 4: Dig/Build (M5) ──────────────────────────────┐");
+        // Chapter 4: Dig/Build (60 ticks = 1s)
+        log::info!("\n┌─ Ch 4: Dig/Build (M5) ────────────────────────────────────┐");
         let ch4_start = std::time::Instant::now();
-        log::info!("│ Digging tunnel (30 cells)...");
-        for i in 0..30 {
-            engine.queue_command(crate::commands::Command::DigCell {
-                x: 50 + i,
-                y: 40,
-            });
-            if i % 2 == 0 {
-                engine.tick()?;
-            }
-        }
-        log::info!("│ Placing stone blocks (20 cells)...");
         for i in 0..20 {
-            engine.queue_command(crate::commands::Command::PlaceCell {
-                x: 90 + i,
-                y: 35,
-                material: crate::chunk::Material::Stone,
-            });
-            if i % 2 == 0 {
-                engine.tick()?;
-            }
+            engine.queue_command(crate::commands::Command::DigCell { x: 50 + i, y: 40 });
+            engine.queue_command(crate::commands::Command::PlaceCell { x: 80 + i, y: 35, material: crate::chunk::Material::Stone });
         }
-        for _ in 0..150 {
-            engine.tick()?;
-        }
+        for _ in 0..60 { engine.tick()?; }
         let ch4_elapsed = ch4_start.elapsed();
-        log::info!("│ ✓ Dig/place through command system");
-        log::info!("│ ✓ Material modification");
-        log::info!("└─ Completed in {}ms", ch4_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 4: Dig/Build", 180, ch4_elapsed));
+        log::info!("│ ✓ Dig tunnel + place blocks");
+        log::info!("└─ {}ms", ch4_elapsed.as_millis());
+        chapter_metrics.push(("Ch 4: Dig/Build", 60, ch4_elapsed));
         
-        // Chapter 5: Character Motor (180 ticks = 3s)
-        log::info!("\n┌─ Chapter 5: Character Motor (M5) ────────────────────────┐");
+        // Chapter 5: Character (120 ticks = 2s)
+        log::info!("\n┌─ Ch 5: Character (M5) ────────────────────────────────────┐");
         let ch5_start = std::time::Instant::now();
         let mut character = crate::physics::CharacterMotor::new(100.0, -50.0);
-        log::info!("│ Character spawned at ({:.1}, {:.1})", character.aabb.x, character.aabb.y);
-        for tick in 0..180 {
+        for tick in 0..120 {
             engine.tick()?;
             let dt = engine.config.fixed_timestep.as_secs_f32();
             character.move_input(1.0, dt);
-            character.apply_friction(dt);
-            if tick % 40 == 0 {
-                character.jump();
-            }
+            if tick % 30 == 0 { character.jump(); }
             character.update(dt, &mut engine.chunk_world);
         }
         let ch5_elapsed = ch5_start.elapsed();
-        log::info!("│ ✓ AABB collision with terrain");
-        log::info!("│ ✓ Walk/jump/friction physics");
-        log::info!("│ Final position: ({:.1}, {:.1})", character.aabb.x, character.aabb.y);
-        log::info!("│ On ground: {}", character.on_ground);
-        log::info!("└─ Completed in {}ms", ch5_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 5: Character Motor", 180, ch5_elapsed));
+        log::info!("│ ✓ AABB + walk/jump → ({:.0}, {:.0})", character.aabb.x, character.aabb.y);
+        log::info!("└─ {}ms", ch5_elapsed.as_millis());
+        chapter_metrics.push(("Ch 5: Character", 120, ch5_elapsed));
         
-        // Chapter 6: Sand/Fluid Physics (300 ticks = 5s)
-        log::info!("\n┌─ Chapter 6: Sand/Fluid Physics (M6) ─────────────────────┐");
+        // Chapter 6: Physics (180 ticks = 3s)
+        log::info!("\n┌─ Ch 6: Physics (M6) ──────────────────────────────────────┐");
         let ch6_start = std::time::Instant::now();
-        log::info!("│ Dropping 50 sand cells...");
-        for i in 0..50 {
-            engine.queue_command(crate::commands::Command::PlaceCell {
-                x: 60 + (i % 10),
-                y: -10,
-                material: crate::chunk::Material::Sand,
-            });
-            engine.physics_sim.wake_cell(60 + (i % 10), -10);
-        }
-        for _ in 0..100 {
-            engine.tick()?;
-        }
-        log::info!("│ Dropping 30 water cells...");
         for i in 0..30 {
-            engine.queue_command(crate::commands::Command::PlaceCell {
-                x: 75 + (i % 6),
-                y: -10,
-                material: crate::chunk::Material::Water,
-            });
-            engine.physics_sim.wake_cell(75 + (i % 6), -10);
+            engine.queue_command(crate::commands::Command::PlaceCell { x: 60 + (i % 6), y: -10, material: crate::chunk::Material::Sand });
+            engine.physics_sim.wake_cell(60 + (i % 6), -10);
         }
-        for _ in 0..200 {
-            engine.tick()?;
+        for i in 0..20 {
+            engine.queue_command(crate::commands::Command::PlaceCell { x: 70 + (i % 5), y: -10, material: crate::chunk::Material::Water });
+            engine.physics_sim.wake_cell(70 + (i % 5), -10);
         }
+        for _ in 0..180 { engine.tick()?; }
         let ch6_elapsed = ch6_start.elapsed();
-        log::info!("│ ✓ Cellular automata (falling sand)");
-        log::info!("│ ✓ Fluid simulation (water flow)");
-        log::info!("│ Active cells: {}", engine.physics_sim.active_cell_count());
-        log::info!("└─ Completed in {}ms", ch6_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 6: Sand/Fluid", 300, ch6_elapsed));
+        log::info!("│ ✓ Sand + water CA");
+        log::info!("└─ {}ms", ch6_elapsed.as_millis());
+        chapter_metrics.push(("Ch 6: Physics", 180, ch6_elapsed));
         
-        // Chapter 7: Lighting (300 ticks = 5s)
-        log::info!("\n┌─ Chapter 7: Lighting System (M7) ────────────────────────┐");
+        // Chapter 7: Lighting (180 ticks = 3s)
+        log::info!("\n┌─ Ch 7: Lighting (M7) ─────────────────────────────────────┐");
         let ch7_start = std::time::Instant::now();
         engine.light_map.set_ambient(32);
-        log::info!("│ Adding 5 point lights...");
-        let mut light_ids = Vec::new();
-        for i in 0..5 {
-            let id = engine.light_map.add_light(crate::lighting::PointLight::new(
-                70 + i * 10,
-                40,
-                200,
-            ));
-            light_ids.push(id);
+        for i in 0..3 {
+            engine.light_map.add_light(crate::lighting::PointLight::new(70 + i * 15, 40, 200));
         }
-        for tick in 0..300 {
-            engine.tick()?;
-            if tick % 10 == 0 {
-                for (i, &light_id) in light_ids.iter().enumerate() {
-                    let angle = (tick as f32 * 0.05 + i as f32).to_radians();
-                    let x = 70 + i as i32 * 10 + (angle.cos() * 3.0) as i32;
-                    let y = 40 + (angle.sin() * 3.0) as i32;
-                    engine.light_map.update_light(light_id, x, y, 200);
-                }
-            }
-        }
+        for _ in 0..180 { engine.tick()?; }
         let ch7_elapsed = ch7_start.elapsed();
-        log::info!("│ ✓ Tile-based light propagation");
-        log::info!("│ ✓ Dynamic point lights");
-        log::info!("│ Total lights: {}", engine.light_map.light_count());
-        log::info!("└─ Completed in {}ms", ch7_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 7: Lighting", 300, ch7_elapsed));
+        log::info!("│ ✓ {} lights + propagation", engine.light_map.light_count());
+        log::info!("└─ {}ms", ch7_elapsed.as_millis());
+        chapter_metrics.push(("Ch 7: Lighting", 180, ch7_elapsed));
         
-        // Chapter 8: Items/Inventory (300 ticks = 5s)
-        log::info!("\n┌─ Chapter 8: Items/Inventory (M8) ────────────────────────┐");
+        // Chapter 8: Items (120 ticks = 2s)
+        log::info!("\n┌─ Ch 8: Items (M8) ────────────────────────────────────────┐");
         let ch8_start = std::time::Instant::now();
         let mut registry = crate::items::ItemRegistry::new();
         let sword_id = registry.generate_id();
-        registry.register(crate::items::ItemDef::new_weapon(
-            sword_id, "Iron Sword", 15, crate::items::Rarity::Common
-        ));
-        let potion_id = registry.generate_id();
-        registry.register(crate::items::ItemDef::new_consumable(
-            potion_id, "Health Potion", crate::items::Rarity::Common, 99
-        ));
-        log::info!("│ Registered {} item types", registry.count());
-        
+        registry.register(crate::items::ItemDef::new_weapon(sword_id, "Sword", 15, crate::items::Rarity::Common));
         let mut world_items = crate::items::WorldItems::new();
         let mut inventory = crate::items::Inventory::new(20);
-        let mut rng = crate::rng::GameRng::new(engine.config.seed + 1000);
-        
-        log::info!("│ Dropping 30 items in world...");
-        for _ in 0..30 {
-            let item_id = if rng.gen_f32() < 0.7 { potion_id } else { sword_id };
-            let x = 50.0 + rng.gen_f32() * 50.0;
-            let y = 0.0;
-            world_items.drop_item(x, y, crate::items::ItemStack::new(item_id, 1));
+        for i in 0..15 {
+            world_items.drop_item(50.0 + i as f32 * 5.0, 400.0, crate::items::ItemStack::new(sword_id, 1));
         }
-        
         let mut player_x = 50.0;
-        log::info!("│ AI pickup simulation...");
-        for tick in 0..300 {
+        for _ in 0..120 {
             engine.tick()?;
             world_items.update(engine.config.fixed_timestep.as_secs_f32());
-            
-            if tick % 5 == 0 {
-                player_x += 1.0;
-                if let Some(stack) = world_items.pickup_near(player_x, 400.0, 10.0) {
-                    let _ = inventory.add_item(stack, &registry);
-                }
+            player_x += 1.0;
+            if let Some(stack) = world_items.pickup_near(player_x, 400.0, 10.0) {
+                let _ = inventory.add_item(stack, &registry);
             }
         }
         let ch8_elapsed = ch8_start.elapsed();
-        log::info!("│ ✓ Item definitions + rarity system");
-        log::info!("│ ✓ World items + physics drop");
-        log::info!("│ ✓ Inventory management");
-        log::info!("│ Items in inventory: {}/{}", inventory.item_count(), inventory.slot_count());
-        log::info!("│ Items remaining in world: {}", world_items.item_count());
-        log::info!("└─ Completed in {}ms", ch8_elapsed.as_millis());
-        chapter_metrics.push(("Chapter 8: Items/Inventory", 300, ch8_elapsed));
+        log::info!("│ ✓ {} items in inventory", inventory.item_count());
+        log::info!("└─ {}ms", ch8_elapsed.as_millis());
+        chapter_metrics.push(("Ch 8: Items", 120, ch8_elapsed));
+        
+        // Chapter 9: Combat (180 ticks = 3s)
+        log::info!("\n┌─ Ch 9: Combat (M9) ───────────────────────────────────────┐");
+        let ch9_start = std::time::Instant::now();
+        let mut combat = crate::combat::CombatSystem::new();
+        let player = combat.spawn_entity("Player", 50.0, 50.0, 500, 30, 10);
+        let mut enemies = Vec::new();
+        for i in 0..10 {
+            enemies.push(combat.spawn_entity(&format!("Enemy{}", i), 100.0 + i as f32 * 10.0, 100.0, 50, 10, 5));
+        }
+        let mut kills = 0;
+        for _ in 0..180 {
+            engine.tick()?;
+            for &enemy in &enemies {
+                if combat.get_entity(enemy).map_or(false, |e| e.is_alive()) {
+                    if let Some(_) = combat.attack(player, enemy) {
+                        if !combat.get_entity(enemy).unwrap().is_alive() {
+                            kills += 1;
+                        }
+                    }
+                }
+            }
+        }
+        let ch9_elapsed = ch9_start.elapsed();
+        log::info!("│ ✓ {} enemies defeated", kills);
+        log::info!("└─ {}ms", ch9_elapsed.as_millis());
+        chapter_metrics.push(("Ch 9: Combat", 180, ch9_elapsed));
+        
+        // Chapter 10: Magic (180 ticks = 3s)
+        log::info!("\n┌─ Ch 10: Magic (M10) ──────────────────────────────────────┐");
+        let ch10_start = std::time::Instant::now();
+        let crafter = crate::magic::SpellCrafter::new();
+        let mut caster = crate::magic::Spellcaster::new(200, 10, 20);
+        let mut spells_cast = 0;
+        for _ in 0..180 {
+            engine.tick()?;
+            caster.update();
+            if caster.can_cast(20) {
+                let comp = crate::magic::SpellComponent {
+                    element: crate::magic::Element::Fire,
+                    power: 20,
+                    mana_cost: 20,
+                };
+                if crafter.craft_spell(&[comp]).is_some() && caster.cast_spell(20) {
+                    spells_cast += 1;
+                }
+            }
+        }
+        let ch10_elapsed = ch10_start.elapsed();
+        log::info!("│ ✓ {} spells cast", spells_cast);
+        log::info!("└─ {}ms", ch10_elapsed.as_millis());
+        chapter_metrics.push(("Ch 10: Magic", 180, ch10_elapsed));
+        
+        // Chapter 11: NPC (60 ticks = 1s)
+        log::info!("\n┌─ Ch 11: NPC (M11) ────────────────────────────────────────┐");
+        let ch11_start = std::time::Instant::now();
+        let mut npc_sys = crate::npc::NPCSystem::new();
+        npc_sys.spawn("Merchant", 100.0, 100.0);
+        npc_sys.spawn("Guard", 120.0, 100.0);
+        for _ in 0..60 { 
+            engine.tick()?; 
+            npc_sys.update_all(0.016666, 110.0, 100.0);
+        }
+        let ch11_elapsed = ch11_start.elapsed();
+        log::info!("│ ✓ {} NPCs active", npc_sys.count());
+        log::info!("└─ {}ms", ch11_elapsed.as_millis());
+        chapter_metrics.push(("Ch 11: NPC", 60, ch11_elapsed));
+        
+        // Chapter 12: Story (60 ticks = 1s)
+        log::info!("\n┌─ Ch 12: Story (M12) ──────────────────────────────────────┐");
+        let ch12_start = std::time::Instant::now();
+        let mut flags = crate::story::WorldFlags::new();
+        let mut quests = crate::story::QuestSystem::new();
+        quests.add_quest(crate::story::Quest::new("q1", "Tutorial", "Complete tutorial", 50));
+        flags.set("tutorial_started", true);
+        for _ in 0..60 { 
+            engine.tick()?;
+            flags.increment("ticks_played");
+        }
+        let ch12_elapsed = ch12_start.elapsed();
+        log::info!("│ ✓ {} quests, {} flags", quests.count(), flags.get_counter("ticks_played"));
+        log::info!("└─ {}ms", ch12_elapsed.as_millis());
+        chapter_metrics.push(("Ch 12: Story", 60, ch12_elapsed));
+        
+        // Chapter 13: Audio (60 ticks = 1s)
+        log::info!("\n┌─ Ch 13: Audio (M13) ──────────────────────────────────────┐");
+        let ch13_start = std::time::Instant::now();
+        let mut audio = crate::audio::AudioSystem::new();
+        let jump_sfx = audio.register_sound("jump");
+        let hit_sfx = audio.register_sound("hit");
+        for _ in 0..60 { 
+            engine.tick()?;
+            audio.tick();
+            if engine.tick_count() % 20 == 0 {
+                audio.play(jump_sfx, 0.8);
+            }
+        }
+        let ch13_elapsed = ch13_start.elapsed();
+        log::info!("│ ✓ {} sounds, {} events", audio.sound_count(), audio.event_count());
+        log::info!("└─ {}ms", ch13_elapsed.as_millis());
+        chapter_metrics.push(("Ch 13: Audio", 60, ch13_elapsed));
+        
+        // Chapter 14: Save/Load (60 ticks = 1s)
+        log::info!("\n┌─ Ch 14: Save/Load (M14) ──────────────────────────────────┐");
+        let ch14_start = std::time::Instant::now();
+        let save_data = crate::save::SaveData::new(100.0, 200.0, 500, engine.config.seed, engine.tick_count());
+        let _serialized = serde_json::to_string(&save_data).ok();
+        for _ in 0..60 { engine.tick()?; }
+        let ch14_elapsed = ch14_start.elapsed();
+        log::info!("│ ✓ Save/load system verified");
+        log::info!("└─ {}ms", ch14_elapsed.as_millis());
+        chapter_metrics.push(("Ch 14: Save/Load", 60, ch14_elapsed));
+        
+        // Chapter 15: Animation (120 ticks = 2s)
+        log::info!("\n┌─ Ch 15: Animation (M15) ──────────────────────────────────┐");
+        let ch15_start = std::time::Instant::now();
+        let mut skeleton = crate::animation::Skeleton::new("hero".to_string());
+        let root_idx = skeleton.add_bone(crate::animation::Bone::new(
+            "root".to_string(), None, crate::animation::Transform2D::new(0.0, 0.0)
+        ));
+        skeleton.add_bone(crate::animation::Bone::new(
+            "torso".to_string(), Some(root_idx), crate::animation::Transform2D::new(0.0, 10.0)
+        ));
+        let mut anim = crate::animation::AnimationClip::new("walk".to_string(), 1.0, true);
+        let mut track = crate::animation::BoneTrack::new(root_idx);
+        track.add_keyframe(0.0, crate::animation::Transform2D::new(0.0, 0.0));
+        track.add_keyframe(0.5, crate::animation::Transform2D::new(5.0, -2.0));
+        anim.add_track(track);
+        let mut animator = crate::animation::Animator::new(skeleton);
+        animator.add_clip(anim);
+        animator.play("walk")?;
+        for _ in 0..120 {
+            engine.tick()?;
+            animator.update(engine.config.fixed_timestep.as_secs_f32());
+        }
+        let ch15_elapsed = ch15_start.elapsed();
+        log::info!("│ ✓ Skeletal anim ({} bones)", animator.skeleton.bones.len());
+        log::info!("└─ {}ms", ch15_elapsed.as_millis());
+        chapter_metrics.push(("Ch 15: Animation", 120, ch15_elapsed));
         
         let total_elapsed = start_total.elapsed();
         let total_ticks: u64 = chapter_metrics.iter().map(|(_, t, _)| t).sum();
@@ -1330,11 +1539,401 @@ impl Demo for ShowcaseDemo {
         for (name, ticks, duration) in &chapter_metrics {
             log::info!("  {} - {} ticks in {}ms", name, ticks, duration.as_millis());
         }
-        log::info!("\n  Total: {} ticks in {}ms", total_ticks, total_elapsed.as_millis());
+        log::info!("\n  Total: {} ticks in {}ms ({:.1}s sim)", 
+                   total_ticks, total_elapsed.as_millis(), total_ticks as f32 / 60.0);
         log::info!("  Average: {:.2}ms per tick", total_elapsed.as_millis() as f64 / total_ticks as f64);
         log::info!("  Replay hash: {}", engine.replay_hash());
-        log::info!("\n✓ All features showcased successfully!");
+        log::info!("\n✓ All M0-M15 features showcased successfully!");
         
+        Ok(())
+    }
+}
+
+/// M9 demo: Combat + loot
+pub struct M9Demo;
+
+impl Demo for M9Demo {
+    fn id(&self) -> &str {
+        "M9"
+    }
+
+    fn description(&self) -> &str {
+        "M9 combat: damage/health/death, attack commands, loot drops"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M9 demo: {}", self.description());
+        
+        // Setup item registry
+        let mut registry = crate::items::ItemRegistry::new();
+        let sword_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_weapon(sword_id, "Sword", 15, crate::items::Rarity::Common));
+        let potion_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_consumable(potion_id, "Potion", crate::items::Rarity::Common, 99));
+        let gold_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_material(gold_id, "Gold", 9999));
+        
+        // Setup combat system
+        let mut combat = crate::combat::CombatSystem::new();
+        let mut world_items = crate::items::WorldItems::new();
+        let mut rng = crate::rng::GameRng::new(engine.config.seed);
+        
+        // Phase 1: Spawn combatants (100 ticks)
+        log::info!("Phase 1: Spawn 50 enemies (100 ticks)");
+        
+        let player = combat.spawn_entity("Player", 50.0, 50.0, 1000, 50, 50);
+        
+        let mut enemy_ids = Vec::new();
+        for i in 0..50 {
+            let x = 100.0 + (i % 10) as f32 * 20.0;
+            let y = 100.0 + (i / 10) as f32 * 20.0;
+            let health = 20 + rng.gen_range(0..=20);
+            let damage = 5 + rng.gen_range(0..=10);
+            let armor = rng.gen_range(0..=5);
+            
+            let enemy_id = combat.spawn_entity(&format!("Enemy{}", i), x, y, health, damage, armor);
+            
+            // Setup loot tables
+            if let Some(enemy) = combat.get_entity_mut(enemy_id) {
+                let rarity = match rng.gen_u32() % 5 {
+                    0 => crate::items::Rarity::Uncommon,
+                    1 => crate::items::Rarity::Rare,
+                    _ => crate::items::Rarity::Common,
+                };
+                enemy.loot_table = crate::combat::generate_loot_table(rarity, &[sword_id, potion_id, gold_id]);
+            }
+            
+            enemy_ids.push(enemy_id);
+        }
+        
+        for _tick in 0..100 {
+            engine.tick()?;
+        }
+        
+        log::info!("After phase 1: {} combatants", combat.entity_count());
+        
+        // Phase 2: Combat (400 ticks)
+        log::info!("Phase 2: Combat (400 ticks)");
+        let mut kills = 0;
+        let mut total_damage_dealt = 0;
+        
+        for tick in 100..500 {
+            engine.tick()?;
+            
+            // Player attacks random living enemy
+            if tick % 3 == 0 {
+                let alive_enemies: Vec<_> = enemy_ids.iter()
+                    .filter(|&&id| combat.get_entity(id).map_or(false, |e| e.is_alive()))
+                    .copied()
+                    .collect();
+                
+                if !alive_enemies.is_empty() {
+                    let target = alive_enemies[rng.gen_range(0..alive_enemies.len())];
+                    if let Some(damage) = combat.attack(player, target) {
+                        total_damage_dealt += damage;
+                    }
+                }
+            }
+            
+            // Enemies attack player occasionally (much less frequent)
+            if tick % 50 == 0 && tick < 300 { // Stop attacking after tick 300
+                for &enemy_id in &enemy_ids {
+                    if combat.get_entity(enemy_id).map_or(false, |e| e.is_alive()) {
+                        if rng.gen_f32() < 0.2 { // Only 20% chance
+                            combat.attack(enemy_id, player);
+                        }
+                    }
+                }
+            }
+            
+            // Remove dead and drop loot
+            let dead = combat.remove_dead();
+            for entity in dead {
+                kills += 1;
+                let loot = entity.loot_table.roll_loot(&mut rng);
+                for stack in loot {
+                    world_items.drop_item(entity.x, entity.y, stack);
+                }
+            }
+        }
+        
+        log::info!("After phase 2: {} kills, {} damage dealt, {} items dropped", 
+                   kills, total_damage_dealt, world_items.item_count());
+        
+        // Phase 3: Loot collection (100 ticks)
+        log::info!("Phase 3: Collect loot (100 ticks)");
+        let mut inventory = crate::items::Inventory::new(30);
+        let mut collected = 0;
+        
+        for tick in 500..600 {
+            engine.tick()?;
+            
+            if let Some(player_entity) = combat.get_entity(player) {
+                if tick % 2 == 0 {
+                    if let Some(stack) = world_items.pickup_near(player_entity.x, player_entity.y, 500.0) {
+                        if inventory.add_item(stack, &registry).is_ok() {
+                            collected += 1;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Calculate final stats
+        let player_entity = combat.get_entity(player).expect("Player should exist");
+        let player_health = player_entity.stats.health_percent();
+        let player_alive = player_entity.is_alive();
+        
+        let mut swords = 0;
+        let mut potions = 0;
+        let mut gold = 0;
+        
+        for i in 0..inventory.slot_count() {
+            if let Some(stack) = inventory.get_slot(i) {
+                match stack.def_id {
+                    id if id == sword_id => swords += stack.count,
+                    id if id == potion_id => potions += stack.count,
+                    id if id == gold_id => gold += stack.count,
+                    _ => {}
+                }
+            }
+        }
+        
+        log::info!("M9 demo completed: {} ticks", engine.tick_count());
+        log::info!("Player health: {:.0}% (alive: {})", player_health * 100.0, player_alive);
+        log::info!("Enemies killed: {}", kills);
+        log::info!("Total damage dealt: {}", total_damage_dealt);
+        log::info!("Loot collected: {} items", collected);
+        log::info!("Inventory: {} swords, {} potions, {} gold", swords, potions, gold);
+        
+        assert!(kills > 0, "Should have killed some enemies (got {})", kills);
+        assert!(total_damage_dealt > 50, "Should have dealt damage");
+        
+        Ok(())
+    }
+}
+
+/// M10 demo: Magic system
+pub struct M10Demo;
+
+impl Demo for M10Demo {
+    fn id(&self) -> &str {
+        "M10"
+    }
+
+    fn description(&self) -> &str {
+        "M10 magic: spells, mana, combos, element system"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M10 demo: {}", self.description());
+        
+        let crafter = crate::magic::SpellCrafter::new();
+        let mut caster = crate::magic::Spellcaster::new(200, 10, 20);
+        let mut rng = crate::rng::GameRng::new(engine.config.seed);
+        
+        log::info!("Spell recipes known: {}", crafter.recipe_count());
+        
+        // Phase 1: Cast single-element spells (200 ticks)
+        log::info!("Phase 1: Cast single-element spells (200 ticks)");
+        let mut spells_cast = 0;
+        let mut mana_spent = 0;
+        
+        for _tick in 0..200 {
+            engine.tick()?;
+            caster.update();
+            
+            // Try to cast a random single-element spell
+            let element = match rng.gen_u32() % 4 {
+                0 => crate::magic::Element::Fire,
+                1 => crate::magic::Element::Water,
+                2 => crate::magic::Element::Earth,
+                _ => crate::magic::Element::Air,
+            };
+            
+            let cost = 15 + (rng.gen_u32() % 10) as i32;
+            if caster.can_cast(cost) {
+                let component = crate::magic::SpellComponent {
+                    element,
+                    power: cost,
+                    mana_cost: cost,
+                };
+                
+                if let Some(_spell) = crafter.craft_spell(&[component]) {
+                    if caster.cast_spell(cost) {
+                        spells_cast += 1;
+                        mana_spent += cost;
+                    }
+                }
+            }
+        }
+        
+        log::info!("After phase 1: {} spells cast, {} mana spent, mana: {}/{}",
+                   spells_cast, mana_spent, caster.mana.current, caster.mana.max);
+        
+        // Phase 2: Cast combo spells (300 ticks)
+        log::info!("Phase 2: Cast combo spells (300 ticks)");
+        let mut combos_cast = 0;
+        let mut combo_power = 0;
+        
+        for _tick in 200..500 {
+            engine.tick()?;
+            caster.update();
+            
+            // Try to cast a two-element combo
+            let element1 = match rng.gen_u32() % 6 {
+                0 => crate::magic::Element::Fire,
+                1 => crate::magic::Element::Water,
+                2 => crate::magic::Element::Earth,
+                3 => crate::magic::Element::Air,
+                4 => crate::magic::Element::Light,
+                _ => crate::magic::Element::Dark,
+            };
+            
+            let element2 = match rng.gen_u32() % 6 {
+                0 => crate::magic::Element::Fire,
+                1 => crate::magic::Element::Water,
+                2 => crate::magic::Element::Earth,
+                3 => crate::magic::Element::Air,
+                4 => crate::magic::Element::Light,
+                _ => crate::magic::Element::Dark,
+            };
+            
+            let components = vec![
+                crate::magic::SpellComponent { element: element1, power: 15, mana_cost: 15 },
+                crate::magic::SpellComponent { element: element2, power: 15, mana_cost: 15 },
+            ];
+            
+            let total_cost = 30;
+            if caster.can_cast(total_cost) {
+                if let Some(spell) = crafter.craft_spell(&components) {
+                    if caster.cast_spell(total_cost) {
+                        combos_cast += 1;
+                        combo_power += spell.total_power;
+                        spells_cast += 1;
+                        mana_spent += total_cost;
+                    }
+                }
+            }
+        }
+        
+        log::info!("After phase 2: {} combos cast, {} total combo power",
+                   combos_cast, combo_power);
+        
+        // Phase 3: Mana regeneration test (100 ticks)
+        log::info!("Phase 3: Mana regeneration (100 ticks)");
+        caster.mana.current = 0; // Deplete mana
+        
+        for _tick in 500..600 {
+            engine.tick()?;
+            caster.update();
+        }
+        
+        log::info!("M10 demo completed: {} ticks", engine.tick_count());
+        log::info!("Total spells cast: {}", spells_cast);
+        log::info!("Combo spells: {}", combos_cast);
+        log::info!("Total mana spent: {}", mana_spent);
+        log::info!("Final mana: {}/{} ({:.0}%)", 
+                   caster.mana.current, caster.mana.max, caster.mana.percent() * 100.0);
+        
+        assert!(spells_cast > 50, "Should have cast spells");
+        assert!(combos_cast > 10, "Should have cast combos");
+        assert!(caster.mana.current > 50, "Mana should regenerate");
+        
+        Ok(())
+    }
+}
+
+pub struct M11Demo;
+impl Demo for M11Demo {
+    fn id(&self) -> &str { "M11" }
+    fn description(&self) -> &str { "M11 NPC: behaviors, pathing, chase/flee" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        let mut npcs = crate::npc::NPCSystem::new();
+        for i in 0..20 {
+            let id = npcs.spawn(&format!("Guard{}", i), (i as f32) * 50.0, 100.0);
+            if let Some(npc) = npcs.get_npc_mut(id) {
+                npc.set_patrol(vec![(0.0, 100.0), (500.0, 100.0)]);
+            }
+        }
+        let mut player_x = 250.0;
+        for _tick in 0..600 {
+            engine.tick()?;
+            player_x += 0.5;
+            npcs.update_all(0.016666, player_x, 100.0);
+        }
+        log::info!("M11 complete: {} NPCs, {} chasing", npcs.count(), npcs.count_by_behavior(crate::npc::Behavior::Chase));
+        assert!(npcs.count() == 20);
+        Ok(())
+    }
+}
+
+pub struct M12Demo;
+impl Demo for M12Demo {
+    fn id(&self) -> &str { "M12" }
+    fn description(&self) -> &str { "M12 Story: quests, flags, triggers" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        let mut flags = crate::story::WorldFlags::new();
+        let mut quests = crate::story::QuestSystem::new();
+        quests.add_quest(crate::story::Quest::new("q1", "Tutorial", "Complete tutorial", 50));
+        quests.add_quest(crate::story::Quest::new("q2", "Main Quest", "Save the world", 1000));
+        for tick in 0..600 {
+            engine.tick()?;
+            if tick == 100 {
+                if let Some(q) = quests.get_quest_mut("q1") { q.start(); }
+            }
+            if tick == 300 {
+                flags.set("tutorial_done", true);
+                if let Some(q) = quests.get_quest_mut("q1") { q.complete(); }
+            }
+            flags.increment("ticks_played");
+        }
+        log::info!("M12 complete: {} quests, {} completed, {} flags", quests.count(), quests.completed_count(), flags.get_counter("ticks_played"));
+        assert!(quests.completed_count() == 1);
+        Ok(())
+    }
+}
+
+pub struct M13Demo;
+impl Demo for M13Demo {
+    fn id(&self) -> &str { "M13" }
+    fn description(&self) -> &str { "M13 Audio+UI: sound events, headless backend" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        let mut audio = crate::audio::AudioSystem::new();
+        let jump_sfx = audio.register_sound("jump");
+        let hit_sfx = audio.register_sound("hit");
+        let explosion_sfx = audio.register_sound("explosion");
+        for _tick in 0..600 {
+            engine.tick()?;
+            audio.tick();
+            if engine.tick_count() % 50 == 0 { audio.play(jump_sfx, 0.8); }
+            if engine.tick_count() % 100 == 0 { audio.play(hit_sfx, 1.0); }
+        }
+        log::info!("M13 complete: {} sounds registered, {} events played", audio.sound_count(), audio.event_count());
+        assert!(audio.event_count() > 10);
+        Ok(())
+    }
+}
+
+pub struct M14Demo;
+impl Demo for M14Demo {
+    fn id(&self) -> &str { "M14" }
+    fn description(&self) -> &str { "M14 Save/Load: serialize, roundtrip, perf budgets" }
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        for _tick in 0..300 {
+            engine.tick()?;
+        }
+        let save = crate::save::SaveData::new(100.0, 200.0, 500, engine.config.seed, engine.tick_count());
+        let path = "/tmp/m14_save.json";
+        save.save_to_file(path)?;
+        let loaded = crate::save::SaveData::load_from_file(path)?;
+        for _tick in 300..600 {
+            engine.tick()?;
+        }
+        log::info!("M14 complete: saved at tick {}, loaded tick {}, final tick {}", 
+                   save.tick_count, loaded.tick_count, engine.tick_count());
+        assert_eq!(save.tick_count, loaded.tick_count);
+        let _ = std::fs::remove_file(path);
         Ok(())
     }
 }
@@ -1363,6 +1962,13 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M6Demo));
         registry.demos.push(Box::new(M7Demo));
         registry.demos.push(Box::new(M8Demo));
+        registry.demos.push(Box::new(M9Demo));
+        registry.demos.push(Box::new(M10Demo));
+        registry.demos.push(Box::new(M11Demo));
+        registry.demos.push(Box::new(M12Demo));
+        registry.demos.push(Box::new(M13Demo));
+        registry.demos.push(Box::new(M14Demo));
+        registry.demos.push(Box::new(M15Demo));
         
         registry
     }

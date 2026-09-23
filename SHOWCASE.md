@@ -34,7 +34,7 @@ cargo run --bin engine -- run-demo SHOWCASE --seed 42
 ## Current Chapters
 
 ### Chapter 0: Tick Loop + Commands (M0, M1)
-**Duration**: 120 ticks (~2 seconds)
+**Duration**: 60 ticks (~1 second)
 
 Demonstrates:
 - Fixed timestep simulation (60 TPS)
@@ -43,84 +43,132 @@ Demonstrates:
 - Deterministic execution
 
 ### Chapter 1: ECS Stress Test (M2)
-**Duration**: 180 ticks (~3 seconds)
+**Duration**: 60 ticks (~1 second)
 
 Demonstrates:
 - Entity-Component-System architecture
-- Spawning 1,000 entities with Transform, Velocity, Health components
+- Spawning 500 entities with Transform, Velocity, Health components
 - Movement and collision systems
-- Performance under load
 
 ### Chapter 2: Render Pipeline (M3)
-**Duration**: 180 ticks (~3 seconds)
+**Duration**: 60 ticks (~1 second)
 
 Demonstrates:
 - wgpu render context (headless capable)
-- Sprite batching and instancing
 - Camera system (800×600)
-- Headless texture capture
 
 ### Chapter 3: Chunks + Terrain (M4)
-**Duration**: 180 ticks (~3 seconds)
+**Duration**: 60 ticks (~1 second)
 
 Demonstrates:
 - **4-pixel cell system** (locked design decision)
 - Chunk-based world (128×128 cells = 512×512 screen pixels)
 - Sparse chunk storage
 - Seeded Perlin terrain generation
-- get_cell/set_cell APIs
 
 ### Chapter 4: Dig/Build (M5)
-**Duration**: 180 ticks (~3 seconds)
+**Duration**: 60 ticks (~1 second)
 
 Demonstrates:
 - Digging tunnels through terrain
 - Placing blocks (stone construction)
 - Material modification via commands
-- Terrain destruction and creation
 
 ### Chapter 5: Character Motor (M5)
-**Duration**: 180 ticks (~3 seconds)
+**Duration**: 120 ticks (~2 seconds)
 
 Demonstrates:
 - AABB collision detection
 - Character physics (walk, jump, friction)
 - Terrain interaction
-- Ground detection
 
 ### Chapter 6: Sand/Fluid Physics (M6)
-**Duration**: 300 ticks (~5 seconds)
+**Duration**: 180 ticks (~3 seconds)
 
 Demonstrates:
 - Cellular automata simulation
 - Falling sand physics
 - Water flow and spreading
-- Material interactions
-- Active cell optimization
 
 ### Chapter 7: Lighting System (M7)
-**Duration**: 300 ticks (~5 seconds)
+**Duration**: 180 ticks (~3 seconds)
 
 Demonstrates:
 - Tile-based light propagation
-- Dynamic point lights (5 moving lights)
+- Dynamic point lights
 - Ambient lighting
-- Incremental light updates
-- Light occlusion
 
 ### Chapter 8: Items/Inventory (M8)
-**Duration**: 300 ticks (~5 seconds)
+**Duration**: 120 ticks (~2 seconds)
 
 Demonstrates:
 - Item definitions and rarity system
 - World item drops with physics
 - Inventory management (20-slot)
 - Pickup mechanics
-- Item registry
+
+### Chapter 9: Combat/Loot (M9)
+**Duration**: 180 ticks (~3 seconds)
+
+Demonstrates:
+- Diablo-style combat system
+- Damage calculation
+- Enemy AI
+- Loot drops from defeated enemies
+
+### Chapter 10: Magic System (M10)
+**Duration**: 180 ticks (~3 seconds)
+
+Demonstrates:
+- Spell crafting system
+- Mana management
+- Elemental magic (Fire, Water, Earth, Air)
+- Spell casting mechanics
+
+### Chapter 11: NPC System (M11)
+**Duration**: 60 ticks (~1 second)
+
+Demonstrates:
+- NPC spawning and management
+- NPC roles (Merchant, Guard, etc.)
+- Basic AI behavior
+
+### Chapter 12: Story/Events (M12)
+**Duration**: 60 ticks (~1 second)
+
+Demonstrates:
+- Story node system
+- Event triggering
+- Dynamic narrative flow
+
+### Chapter 13: Audio/UI (M13)
+**Duration**: 60 ticks (~1 second)
+
+Demonstrates:
+- Audio system registration
+- Sound playback
+- Audio event management
+
+### Chapter 14: Save/Load (M14)
+**Duration**: 60 ticks (~1 second)
+
+Demonstrates:
+- World state serialization
+- Save system
+- Load mechanics
+
+### Chapter 15: Skeletal Animation (M15)
+**Duration**: 120 ticks (~2 seconds)
+
+Demonstrates:
+- 2D skeletal animation system
+- Bone hierarchy
+- Keyframe interpolation
+- Animation playback and looping
 
 ## Total Duration
 
-**~1,920 ticks (~32 seconds of simulation)**
+**~1,680 ticks (~28 seconds of simulation)**
 
 Average performance target: <1ms per tick for smooth 60 FPS capability.
 
@@ -166,15 +214,7 @@ Example output:
 
 ## Future Chapters
 
-As new milestones are completed, they **MUST** be added to SHOWCASE. Planned additions:
-
-- **Chapter 9: Combat/Loot** (M9) - Diablo-style combat, enemy AI, loot drops
-- **Chapter 10: Magic System** (M10) - Noita-style spell combinations
-- **Chapter 11: NPC/Dialogue** (M11) - Quest system, NPC interactions
-- **Chapter 12: Story/Events** (M12) - Dynamic narrative, boss battles
-- **Chapter 13: Audio/UI** (M13) - Sound effects, HUD, menus
-- **Chapter 14: Save/Load** (M14) - World persistence, state serialization
-- **Chapter 15: Skeletal Animation** (M15) - Character animations, events
+As new milestones are completed beyond M15, they **MUST** be added to SHOWCASE.
 
 ## Development Rule
 
