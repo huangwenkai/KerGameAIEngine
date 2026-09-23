@@ -21,10 +21,13 @@ Successfully implemented a **playable Terraria-like vertical slice demo** on Ker
   - Runs in ~24ms real-time, 600 ticks (10s simulation)
   - Exit code 0 on success
   
-- **Windowed Mode** (stub): Framework for future interactive play
-  - Currently falls back to headless for testing
-  - Documented controls: WASD/Arrows, Space, LMB/RMB, 1-9, ESC
-  - Ready for winit event loop integration
+- **Windowed Mode**: Real interactive gameplay with keyboard/mouse
+  - Opens 1024×768 window using winit 0.30 ApplicationHandler
+  - Full keyboard controls (WASD/arrows, Space, 1-9, ESC)
+  - Mouse controls (dig with LMB, place with RMB)
+  - Camera follows player smoothly
+  - Runs at fixed 60 TPS with wall-clock frame pacing
+  - Game ends on ESC, player death, or 60s time limit
 
 ### 2. Integrated Systems
 
