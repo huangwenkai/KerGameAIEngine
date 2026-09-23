@@ -531,6 +531,139 @@ impl Demo for M4Demo {
     }
 }
 
+/// M5 demo: Character motor + collision + dig/build
+pub struct M5Demo;
+
+impl Demo for M5Demo {
+    fn id(&self) -> &str {
+        "M5"
+    }
+
+    fn description(&self) -> &str {
+        "M5 character motor: AABB collision + walk/jump + dig tunnel + place blocks"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M5 demo: {}", self.description());
+        
+        // Generate terrain
+        let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
+        log::info!("Generating terrain (3×3 chunks)...");
+        for cy in -1..=1 {
+            for cx in -1..=1 {
+                terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
+            }
+        }
+        log::info!("Terrain generated: {} chunks", engine.chunk_world.chunk_count());
+        
+        // Create character at spawn point (air above ground)
+        let mut character = crate::physics::CharacterMotor::new(100.0, -50.0);
+        log::info!("Character spawned at ({}, {})", character.aabb.x, character.aabb.y);
+        
+        // Phase 1: Walk and jump (200 ticks)
+        log::info!("Phase 1: Walk and jump (200 ticks)");
+        for tick in 0..200 {
+            engine.tick()?;
+            
+            let dt = engine.config.fixed_timestep.as_secs_f32();
+            
+            // Walk right
+            character.move_input(1.0, dt);
+            character.apply_friction(dt);
+            
+            // Jump every 50 ticks
+            if tick % 50 == 0 {
+                character.jump();
+            }
+            
+            character.update(dt, &mut engine.chunk_world);
+        }
+        
+        log::info!("After phase 1: pos=({:.1}, {:.1}), on_ground={}", 
+                   character.aabb.x, character.aabb.y, character.on_ground);
+        
+        // Phase 2: Dig horizontal tunnel (200 ticks)
+        log::info!("Phase 2: Dig horizontal tunnel (200 ticks)");
+        let dig_y = 50; // Underground level
+        for tick in 200..400 {
+            engine.tick()?;
+            
+            let dt = engine.config.fixed_timestep.as_secs_f32();
+            
+            // Dig ahead
+            if tick % 5 == 0 {
+                let dig_x = ((character.aabb.center_x() / 4.0) as i32) + 3;
+                engine.queue_command(crate::commands::Command::DigCell {
+                    x: dig_x,
+                    y: dig_y,
+                });
+                engine.queue_command(crate::commands::Command::DigCell {
+                    x: dig_x,
+                    y: dig_y - 1,
+                });
+                engine.queue_command(crate::commands::Command::DigCell {
+                    x: dig_x,
+                    y: dig_y + 1,
+                });
+            }
+            
+            // Move character
+            character.move_input(0.5, dt);
+            character.apply_friction(dt);
+            character.update(dt, &mut engine.chunk_world);
+        }
+        
+        log::info!("After phase 2: pos=({:.1}, {:.1}), tunnel dug", 
+                   character.aabb.x, character.aabb.y);
+        
+        // Phase 3: Place blocks to build structure (200 ticks)
+        log::info!("Phase 3: Place blocks (200 ticks)");
+        let build_start_x = (character.aabb.center_x() / 4.0) as i32;
+        for tick in 400..600 {
+            engine.tick()?;
+            
+            let dt = engine.config.fixed_timestep.as_secs_f32();
+            
+            // Build a small platform
+            if tick % 10 == 0 {
+                let offset = (tick - 400) / 10;
+                engine.queue_command(crate::commands::Command::PlaceCell {
+                    x: build_start_x + offset,
+                    y: dig_y + 5,
+                    material: crate::chunk::Material::Stone,
+                });
+            }
+            
+            character.update(dt, &mut engine.chunk_world);
+        }
+        
+        log::info!("After phase 3: pos=({:.1}, {:.1}), platform built", 
+                   character.aabb.x, character.aabb.y);
+        
+        // Verify
+        let cells_dug = (0..20).filter(|&i| {
+            let x = 120 + i * 2;
+            engine.chunk_world.get_cell(x, dig_y) == crate::chunk::Material::Air
+        }).count();
+        
+        let blocks_placed = (0..20).filter(|&i| {
+            let x = build_start_x + i;
+            engine.chunk_world.get_cell(x, dig_y + 5) == crate::chunk::Material::Stone
+        }).count();
+        
+        log::info!("M5 demo completed: {} ticks", engine.tick_count());
+        log::info!("Final character pos: ({:.1}, {:.1})", character.aabb.x, character.aabb.y);
+        log::info!("Cells dug (sampled): {}/20", cells_dug);
+        log::info!("Blocks placed (verified): {}/20", blocks_placed);
+        log::info!("Character on ground: {}", character.on_ground);
+        
+        assert!(cells_dug > 5, "Should have dug some tunnel");
+        assert!(blocks_placed > 5, "Should have placed some blocks");
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -548,6 +681,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M2Demo));
         registry.demos.push(Box::new(M3Demo));
         registry.demos.push(Box::new(M4Demo));
+        registry.demos.push(Box::new(M5Demo));
         
         registry
     }

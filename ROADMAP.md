@@ -112,7 +112,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M5: 挖掘/建造 + 角色运动
+### M5: 挖掘/建造 + 角色运动 ✓ COMPLETE (2026-09-23)
 **目标**: 玩家交互基础
 - 角色CharacterMotor: AABB碰撞，爬梯，跳跃
 - DigBuildSystem: 鼠标点击改变像素Material

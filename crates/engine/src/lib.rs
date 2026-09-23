@@ -17,9 +17,13 @@ pub mod ecs;
 pub mod render;
 pub mod chunk;
 pub mod terrain;
+pub mod physics;
 
 #[cfg(test)]
 mod replay_tests;
+
+#[cfg(test)]
+mod m5_tests;
 
 use anyhow::Result;
 use std::time::Duration;
@@ -79,7 +83,7 @@ impl Engine {
         // Process commands for this tick
         for cmd in self.command_buffer.drain() {
             self.replay_hasher.hash_command(&cmd);
-            cmd.apply(&mut self.world);
+            cmd.apply(&mut self.world, &mut self.chunk_world);
         }
         
         // Update old world physics (M1)
