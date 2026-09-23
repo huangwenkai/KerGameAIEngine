@@ -768,6 +768,144 @@ impl Demo for M6Demo {
     }
 }
 
+/// M7 demo: Lighting system
+pub struct M7Demo;
+
+impl Demo for M7Demo {
+    fn id(&self) -> &str {
+        "M7"
+    }
+
+    fn description(&self) -> &str {
+        "M7 lighting: tile light propagation + point lights + incremental updates"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M7 demo: {}", self.description());
+        
+        // Generate base terrain
+        let terrain_gen = crate::terrain::TerrainGenerator::new(engine.config.seed);
+        log::info!("Generating terrain...");
+        for cy in -1..=1 {
+            for cx in -1..=1 {
+                terrain_gen.generate_chunk(&mut engine.chunk_world, crate::chunk::ChunkCoord::new(cx, cy));
+            }
+        }
+        log::info!("Terrain generated: {} chunks", engine.chunk_world.chunk_count());
+        
+        // Set ambient light
+        engine.light_map.set_ambient(32);
+        
+        // Phase 1: Dig cave + place torches (300 ticks)
+        log::info!("Phase 1: Dig cave + place 10 torches (300 ticks)");
+        let cave_x = 60;
+        let cave_y = 40;
+        
+        for tick in 0..300 {
+            engine.tick()?;
+            
+            // Dig cave (horizontal tunnel)
+            if tick % 10 == 0 {
+                let offset = tick / 10;
+                for dy in -2..=2 {
+                    engine.queue_command(crate::commands::Command::DigCell {
+                        x: cave_x + offset as i32,
+                        y: cave_y + dy,
+                    });
+                }
+            }
+            
+            // Place torches every 5 cells
+            if tick % 50 == 0 && tick > 0 {
+                let torch_x = cave_x + (tick / 10) as i32;
+                engine.light_map.add_light(crate::lighting::PointLight::new(
+                    torch_x,
+                    cave_y,
+                    200,
+                ));
+            }
+        }
+        
+        log::info!("After phase 1: {} lights, {} dirty cells", 
+                   engine.light_map.light_count(), engine.light_map.dirty_count());
+        
+        // Phase 2: Add moving lights (200 ticks)
+        log::info!("Phase 2: Add 5 moving lights (200 ticks)");
+        
+        // Add moving lights
+        let moving_light_ids: Vec<_> = (0..5).map(|i| {
+            engine.light_map.add_light(crate::lighting::PointLight::new(
+                80 + i * 10,
+                30,
+                180,
+            ))
+        }).collect();
+        
+        for tick in 300..500 {
+            engine.tick()?;
+            
+            // Move lights in circles
+            if tick % 5 == 0 {
+                for (i, &light_id) in moving_light_ids.iter().enumerate() {
+                    let angle = (tick as f32 * 0.1 + i as f32 * 1.0).to_radians();
+                    let radius = 5.0;
+                    let center_x = 80 + i as i32 * 10;
+                    let center_y = 30;
+                    let x = center_x + (angle.cos() * radius) as i32;
+                    let y = center_y + (angle.sin() * radius) as i32;
+                    engine.light_map.update_light(light_id, x, y, 180);
+                }
+            }
+        }
+        
+        log::info!("After phase 2: {} lights, {} dirty cells", 
+                   engine.light_map.light_count(), engine.light_map.dirty_count());
+        
+        // Phase 3: Light propagation settle (100 ticks)
+        log::info!("Phase 3: Light propagation settle (100 ticks)");
+        for _tick in 500..600 {
+            engine.tick()?;
+        }
+        
+        // Calculate lighting metrics
+        let mut lit_cells = 0;
+        let mut bright_cells = 0;
+        let mut total_light = 0u64;
+        
+        for y in 20..60 {
+            for x in 40..120 {
+                let light = engine.light_map.get_light(x, y);
+                if light > 50 {
+                    lit_cells += 1;
+                    if light > 150 {
+                        bright_cells += 1;
+                    }
+                    total_light += light as u64;
+                }
+            }
+        }
+        
+        let avg_light = if lit_cells > 0 {
+            (total_light / lit_cells as u64) as u32
+        } else {
+            0
+        };
+        
+        log::info!("M7 demo completed: {} ticks", engine.tick_count());
+        log::info!("Total lights: {}", engine.light_map.light_count());
+        log::info!("Lit cells (>50): {}", lit_cells);
+        log::info!("Bright cells (>150): {}", bright_cells);
+        log::info!("Average light level: {}", avg_light);
+        log::info!("Final dirty cells: {}", engine.light_map.dirty_count());
+        
+        assert!(engine.light_map.light_count() >= 10, "Should have at least 10 lights");
+        assert!(lit_cells > 100, "Should have lit area (got {} cells)", lit_cells);
+        assert!(bright_cells > 10, "Should have bright areas near torches");
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -787,6 +925,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M4Demo));
         registry.demos.push(Box::new(M5Demo));
         registry.demos.push(Box::new(M6Demo));
+        registry.demos.push(Box::new(M7Demo));
         
         registry
     }

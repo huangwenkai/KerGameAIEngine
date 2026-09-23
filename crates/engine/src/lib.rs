@@ -19,6 +19,7 @@ pub mod chunk;
 pub mod terrain;
 pub mod physics;
 pub mod automata;
+pub mod lighting;
 
 #[cfg(test)]
 mod replay_tests;
@@ -58,6 +59,7 @@ pub struct Engine {
     pub ecs: ecs::EcsWorld,
     pub chunk_world: chunk::ChunkWorld,
     pub physics_sim: automata::PhysicsSimulator,
+    pub light_map: lighting::LightMap,
 }
 
 impl Engine {
@@ -76,6 +78,7 @@ impl Engine {
             ecs: ecs::EcsWorld::new(),
             chunk_world: chunk::ChunkWorld::new(),
             physics_sim: automata::PhysicsSimulator::new(10_000),
+            light_map: lighting::LightMap::new(),
         }
     }
 
@@ -91,8 +94,10 @@ impl Engine {
             // Wake cells affected by dig/place commands
             if let commands::Command::DigCell { x, y } = cmd {
                 self.physics_sim.wake_cell(x, y);
+                self.light_map.mark_dirty(x, y);
             } else if let commands::Command::PlaceCell { x, y, .. } = cmd {
                 self.physics_sim.wake_cell(x, y);
+                self.light_map.mark_dirty(x, y);
             }
         }
         
@@ -106,6 +111,9 @@ impl Engine {
         
         // Update cellular automata physics (M6)
         self.physics_sim.update(&mut self.chunk_world);
+        
+        // Update lighting (M7) - incremental updates
+        self.light_map.update(&mut self.chunk_world, 500);
         
         Ok(())
     }
