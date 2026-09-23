@@ -21,30 +21,58 @@ This repository has undergone a complete hard reset. The previous C# MonoGame co
 # Build
 cargo build --release
 
-# Run M0 demo (scaffold validation)
-cargo run --release --bin engine -- run-demo M0 --headless --seed 42 --report m0-report.json
+# Run the playable Terraria-like demo (headless bot mode)
+cargo run --release --bin engine -- run-demo TERRARIA --headless --seed 42 --report terraria.json
 
 # List available demos
 cargo run --release --bin engine -- list-demos
+
+# Run SHOWCASE (all features in ~30s)
+cargo run --release --bin engine -- run-demo SHOWCASE --headless --seed 42 --report showcase.json
 ```
+
+### Playable Terraria Demo
+
+The **TERRARIA** demo is a vertical slice of a playable Terraria-like game that integrates all engine systems:
+
+**Features:**
+- 🌍 Generated overworld with terrain (dirt, stone, air)
+- 🏃 Player movement (walk, jump) with physics
+- ⛏️ Dig & place blocks → inventory system
+- 👾 Enemy spawning, AI (chase), and combat
+- 💡 Dynamic lighting system
+- ❤️ Health, damage, and survival mechanics
+
+**How to run:**
+```bash
+# Headless bot mode (automated 10s playthrough)
+cargo run --release --bin engine -- run-demo TERRARIA --headless --seed 42 --report terraria.json
+
+# Windowed mode (coming soon - will open interactive window)
+# cargo run --release --bin engine -- run-demo TERRARIA --seed 42
+```
+
+**Goal:** Bot survives, digs blocks, collects items, fights enemies - proving all systems work together.
 
 ## 📊 Milestones
 
 - **M0** ✓ Scaffold + CLI + headless report harness
-- **M1** Time loop + commands + seed + replay hash
-- **M2** ECS stress
-- **M3** Render pipeline
-- **M4** Pixel/chunk world
-- **M5** Dig/build + motor
-- **M6** Sand/fluid/reactions
-- **M7** Lighting
-- **M8** Items
-- **M9** Combat/loot
-- **M10** Magic combos
-- **M11** NPCs
-- **M12** Story/events
-- **M13** Audio/UI
-- **M14** Save/perf/ship
+- **M1** ✓ Time loop + commands + seed + replay hash
+- **M2** ✓ ECS stress
+- **M3** ✓ Render pipeline
+- **M4** ✓ Pixel/chunk world
+- **M5** ✓ Dig/build + motor
+- **M6** ✓ Sand/fluid/reactions
+- **M7** ✓ Lighting
+- **M8** ✓ Items
+- **M9** ✓ Combat/loot
+- **M10** ✓ Magic combos
+- **M11** ✓ NPCs
+- **M12** ✓ Story/events
+- **M13** ✓ Audio/UI
+- **M14** ✓ Save/perf/ship
+- **M15** ✓ 2D skeletal animation
+- **TERRARIA** ✓ Playable vertical slice demo (all systems integrated)
 
 See [`ROADMAP.md`](ROADMAP.md) for detailed milestone breakdown.
 

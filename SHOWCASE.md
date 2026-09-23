@@ -34,6 +34,8 @@ cargo run --bin engine -- run-demo SHOWCASE --seed 42
 ## Current Chapters
 
 ### Chapter 0: Tick Loop + Commands (M0, M1)
+
+### Chapter 0: Tick Loop + Commands (M0, M1)
 **Duration**: 60 ticks (~1 second)
 
 Demonstrates:
@@ -166,9 +168,29 @@ Demonstrates:
 - Keyframe interpolation
 - Animation playback and looping
 
+### Chapter 16: Terraria Playable Demo
+**Duration**: 180 ticks (~3 seconds)
+
+Demonstrates:
+- **Vertical slice of a complete game**
+- Terrain generation (dirt/stone/air world)
+- Player character motor (movement, jumping, physics)
+- Dig & place blocks with inventory management
+- Enemy spawning and AI (chase behavior)
+- Combat system (HP, damage, death)
+- Dynamic lighting
+- All systems working together in one playable loop
+
+**Note**: This chapter is a mini version of the full TERRARIA demo, which can be run standalone with:
+```bash
+cargo run --bin engine -- run-demo TERRARIA --headless --seed 42 --report terraria.json
+```
+
+The TERRARIA demo validates that KerGameAIEngine can support a real game loop, not just isolated tech demos.
+
 ## Total Duration
 
-**~1,680 ticks (~28 seconds of simulation)**
+**~1,980 ticks (~33 seconds of simulation)**
 
 Average performance target: <1ms per tick for smooth 60 FPS capability.
 
