@@ -20,6 +20,7 @@ pub mod terrain;
 pub mod physics;
 pub mod automata;
 pub mod lighting;
+pub mod items;
 
 #[cfg(test)]
 mod replay_tests;

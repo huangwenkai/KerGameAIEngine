@@ -906,6 +906,158 @@ impl Demo for M7Demo {
     }
 }
 
+/// M8 demo: Item system
+pub struct M8Demo;
+
+impl Demo for M8Demo {
+    fn id(&self) -> &str {
+        "M8"
+    }
+
+    fn description(&self) -> &str {
+        "M8 items: definitions, inventory, drop/pickup mechanics"
+    }
+
+    fn run(&self, engine: &mut Engine) -> Result<()> {
+        log::info!("Running M8 demo: {}", self.description());
+        
+        // Create item registry
+        let mut registry = crate::items::ItemRegistry::new();
+        
+        // Register item definitions
+        log::info!("Registering items...");
+        let sword_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_weapon(
+            sword_id, "Iron Sword", 15, crate::items::Rarity::Common
+        ));
+        
+        let axe_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_weapon(
+            axe_id, "Steel Axe", 20, crate::items::Rarity::Uncommon
+        ));
+        
+        let armor_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_armor(
+            armor_id, "Chain Mail", 25, crate::items::Rarity::Rare
+        ));
+        
+        let potion_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_consumable(
+            potion_id, "Health Potion", crate::items::Rarity::Common, 99
+        ));
+        
+        let wood_id = registry.generate_id();
+        registry.register(crate::items::ItemDef::new_material(
+            wood_id, "Wood", 999
+        ));
+        
+        log::info!("Registered {} items", registry.count());
+        
+        // Create world items and inventory
+        let mut world_items = crate::items::WorldItems::new();
+        let mut inventory = crate::items::Inventory::new(20);
+        
+        // Phase 1: Drop items in world (200 ticks)
+        log::info!("Phase 1: Drop 100 items (200 ticks)");
+        let mut rng = crate::rng::GameRng::new(engine.config.seed);
+        
+        for tick in 0..200 {
+            engine.tick()?;
+            
+            // Drop random items
+            if tick % 2 == 0 {
+                let item_type = rng.gen_u32() % 5;
+                let (def_id, count) = match item_type {
+                    0 => (sword_id, 1),
+                    1 => (axe_id, 1),
+                    2 => (armor_id, 1),
+                    3 => (potion_id, rng.gen_range(1..=10)),
+                    _ => (wood_id, rng.gen_range(1..=50)),
+                };
+                
+                let x = 50.0 + rng.gen_f32() * 100.0;
+                let y = 0.0;
+                world_items.drop_item(x, y, crate::items::ItemStack::new(def_id, count));
+            }
+            
+            // Update item physics
+            world_items.update(engine.config.fixed_timestep.as_secs_f32());
+        }
+        
+        log::info!("After phase 1: {} items in world", world_items.item_count());
+        
+        // Phase 2: Pickup items (300 ticks)
+        log::info!("Phase 2: AI pickup items (300 ticks)");
+        let mut player_x = 50.0;
+        let mut player_y = 400.0;
+        let mut items_picked = 0;
+        
+        for tick in 200..500 {
+            engine.tick()?;
+            
+            // Move player toward items
+            if tick % 5 == 0 {
+                player_x += 2.0;
+                if player_x > 150.0 {
+                    player_x = 50.0;
+                }
+            }
+            
+            // Try to pickup nearby items
+            if tick % 3 == 0 {
+                if let Some(stack) = world_items.pickup_near(player_x, player_y, 10.0) {
+                    if inventory.add_item(stack, &registry).is_ok() {
+                        items_picked += 1;
+                    }
+                }
+            }
+        }
+        
+        log::info!("After phase 2: {} items remaining in world, {} items in inventory", 
+                   world_items.item_count(), inventory.item_count());
+        log::info!("Total items picked: {}", items_picked);
+        
+        // Phase 3: Inventory management (100 ticks)
+        log::info!("Phase 3: Inventory management (100 ticks)");
+        for _tick in 500..600 {
+            engine.tick()?;
+        }
+        
+        // Count items by type in inventory
+        let mut weapon_count = 0;
+        let mut armor_count = 0;
+        let mut consumable_count = 0;
+        let mut material_count = 0;
+        
+        for i in 0..inventory.slot_count() {
+            if let Some(stack) = inventory.get_slot(i) {
+                if let Some(def) = registry.get(stack.def_id) {
+                    match def.item_type {
+                        crate::items::ItemType::Weapon => weapon_count += stack.count,
+                        crate::items::ItemType::Armor => armor_count += stack.count,
+                        crate::items::ItemType::Consumable => consumable_count += stack.count,
+                        crate::items::ItemType::Material => material_count += stack.count,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        
+        log::info!("M8 demo completed: {} ticks", engine.tick_count());
+        log::info!("Inventory slots used: {}/{}", inventory.item_count(), inventory.slot_count());
+        log::info!("Weapons: {}", weapon_count);
+        log::info!("Armor: {}", armor_count);
+        log::info!("Consumables: {}", consumable_count);
+        log::info!("Materials: {}", material_count);
+        log::info!("Items remaining in world: {}", world_items.item_count());
+        
+        assert!(items_picked > 10, "Should have picked up items");
+        assert!(inventory.item_count() > 5, "Should have items in inventory");
+        
+        Ok(())
+    }
+}
+
 /// Demo registry
 pub struct DemoRegistry {
     demos: Vec<Box<dyn Demo>>,
@@ -926,6 +1078,7 @@ impl DemoRegistry {
         registry.demos.push(Box::new(M5Demo));
         registry.demos.push(Box::new(M6Demo));
         registry.demos.push(Box::new(M7Demo));
+        registry.demos.push(Box::new(M8Demo));
         
         registry
     }

@@ -151,7 +151,7 @@ engine run-demo <ID> --headless --seed <N> --report <PATH.json>
 
 ---
 
-### M8: 物品系统
+### M8: 物品系统 ✓ COMPLETE (2026-09-23)
 **目标**: Diablo风格物品
 - Item定义 (武器，装备，消耗品)
 - Inventory系统
